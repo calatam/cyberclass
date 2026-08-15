@@ -1,14 +1,16 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { useCatalogo } from '../catalogo-context';
-import { useI18n } from '../i18n';
+import { useI18n, IDIOMAS } from '../i18n';
 import { api, getToken } from '../api';
 import { fetchProgreso, calcularInsignias, progresoRuta, moduloAprobado, PROGRESO_VACIO } from '../store';
-import type { Progreso, Usuario } from '../types';
+import type { Progreso, Usuario, Ruta } from '../types';
 
 export default function Perfil() {
-  const { rutas } = useCatalogo();
   const { t } = useI18n();
+  // El progreso del alumno abarca los dos idiomas del curso, así que el perfil
+  // se calcula contra AMBOS catálogos: si no, completar una ruta en inglés
+  // haría desaparecer sus insignias al mirar el perfil en español.
+  const [rutas, setRutas] = useState<Ruta[]>([]);
   const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -26,6 +28,9 @@ export default function Perfil() {
 
   useEffect(() => {
     fetchProgreso().then(setProgreso);
+    Promise.all(IDIOMAS.map((i) => api<{ rutas: Ruta[] }>(`/api/catalogo?idioma=${i}`)))
+      .then((cats) => setRutas(cats.flatMap((c) => c.rutas)))
+      .catch(() => setRutas([]));
     if (getToken()) {
       api<Usuario>('/api/me').then((u) => {
         setUsuario(u);
