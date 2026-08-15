@@ -90,9 +90,11 @@ app.post('/api/auth/login', {
   return { token: firmarToken(user), usuario: { id: user.id, email: user.email, nombre: user.nombre, xp: user.xp } };
 });
 
-app.get('/api/me', { preHandler: [(app as any).auth] }, async (req: any) => {
+app.get('/api/me', { preHandler: [(app as any).auth] }, async (req: any, reply) => {
   const user = db.prepare('SELECT id, email, nombre, xp FROM users WHERE id = ?').get(req.user.sub) as UserRow | undefined;
-  return user ?? {};
+  // Token válido pero usuario eliminado: 401 para que el cliente limpie la sesión
+  if (!user) return reply.code(401).send({ error: 'Usuario no existe' });
+  return user;
 });
 
 // ---------- catálogo (público, SIN respuestas correctas ni explicaciones) ----------
