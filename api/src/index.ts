@@ -125,6 +125,49 @@ app.get('/api/me', { preHandler: [(app as any).auth] }, async (req: any, reply) 
   return user;
 });
 
+// ---------- configuración de cuenta ----------
+
+app.patch('/api/me', {
+  preHandler: [(app as any).auth],
+  schema: {
+    body: {
+      type: 'object',
+      required: ['nombre'],
+      properties: { nombre: { type: 'string', minLength: 2, maxLength: 100 } },
+    },
+  },
+}, async (req: any, reply) => {
+  const { nombre } = req.body as { nombre: string };
+  const info = db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre.trim(), req.user.sub);
+  if (info.changes === 0) return reply.code(401).send({ error: 'Usuario no existe' });
+  const user = db.prepare('SELECT id, email, nombre, xp FROM users WHERE id = ?').get(req.user.sub) as UserRow | undefined;
+  return user ?? {};
+});
+
+app.post('/api/auth/password', {
+  preHandler: [rateLimit(10, 60_000), (app as any).auth],
+  schema: {
+    body: {
+      type: 'object',
+      required: ['actual', 'nueva'],
+      properties: {
+        actual: { type: 'string', minLength: 1, maxLength: 200 },
+        nueva: { type: 'string', minLength: 8, maxLength: 200 },
+      },
+    },
+  },
+}, async (req: any, reply) => {
+  const { actual, nueva } = req.body as { actual: string; nueva: string };
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.sub) as UserRow | undefined;
+  if (!user) return reply.code(401).send({ error: 'Usuario no existe' });
+  if (!(await verifyPassword(actual, user.password_hash))) {
+    return reply.code(401).send({ error: 'La contraseña actual es incorrecta' });
+  }
+  const hash = await hashPassword(nueva);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+  return { ok: true };
+});
+
 // ---------- catálogo (público, SIN respuestas correctas ni explicaciones) ----------
 
 const CATALOGO_PUBLICO = {
