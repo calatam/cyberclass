@@ -14,8 +14,34 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-const app = Fastify({ logger: true });
+// trustProxy: nginx reenvía X-Forwarded-For; sin esto req.ip sería siempre 127.0.0.1
+const app = Fastify({ logger: true, trustProxy: true });
 await app.register(fjwt, { secret: JWT_SECRET });
+
+// ---------- rate limiting (en memoria, por IP + ruta) ----------
+
+const rateBuckets = new Map<string, { count: number; reset: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, b] of rateBuckets) if (now > b.reset) rateBuckets.delete(k);
+}, 10 * 60 * 1000).unref();
+
+function rateLimit(max: number, windowMs: number) {
+  return async (req: any, reply: any) => {
+    const key = `${req.routeOptions.url}:${req.ip}`;
+    const now = Date.now();
+    let bucket = rateBuckets.get(key);
+    if (!bucket || now > bucket.reset) {
+      bucket = { count: 0, reset: now + windowMs };
+      rateBuckets.set(key, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > max) {
+      reply.header('Retry-After', String(Math.ceil((bucket.reset - now) / 1000)));
+      return reply.code(429).send({ error: 'Demasiados intentos. Espera un momento.' });
+    }
+  };
+}
 
 // ---------- helpers ----------
 
@@ -51,6 +77,7 @@ app.decorate('auth', async (request: any, reply: any) => {
 // ---------- auth ----------
 
 app.post('/api/auth/register', {
+  preHandler: [rateLimit(10, 60_000)],
   schema: {
     body: {
       type: 'object',
@@ -74,6 +101,7 @@ app.post('/api/auth/register', {
 });
 
 app.post('/api/auth/login', {
+  preHandler: [rateLimit(10, 60_000)],
   schema: {
     body: {
       type: 'object',
@@ -115,7 +143,7 @@ app.get('/api/catalogo', async () => CATALOGO_PUBLICO);
 // ---------- evaluación (el servidor valida; las respuestas nunca viajan al cliente) ----------
 
 app.post('/api/answer', {
-  preHandler: [(app as any).auth],
+  preHandler: [rateLimit(60, 60_000), (app as any).auth],
   schema: {
     body: {
       type: 'object',
@@ -141,7 +169,7 @@ app.post('/api/answer', {
 });
 
 app.post('/api/attempts', {
-  preHandler: [(app as any).auth],
+  preHandler: [rateLimit(20, 60_000), (app as any).auth],
   schema: {
     body: {
       type: 'object',
