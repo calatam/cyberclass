@@ -8,6 +8,7 @@ import Modulo from './pages/Modulo';
 import Perfil from './pages/Perfil';
 import Login from './pages/Login';
 import Registro from './pages/Registro';
+import NotFound from './pages/NotFound';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Registro />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </CatalogoProvider>
     </BrowserRouter>
