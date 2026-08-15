@@ -159,6 +159,61 @@ app.get('/api/admin/users', { preHandler: [(app as any).adminOnly] }, async () =
   return { usuarios };
 });
 
+app.patch('/api/admin/users/:id', {
+  preHandler: [(app as any).adminOnly],
+  schema: {
+    params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+    body: {
+      type: 'object',
+      required: ['rol'],
+      properties: { rol: { type: 'string', enum: ['alumno', 'admin'] } },
+    },
+  },
+}, async (req: any, reply) => {
+  const id = Number(req.params.id);
+  const { rol } = req.body as { rol: string };
+  if (id === Number(req.user.sub)) {
+    return reply.code(400).send({ error: 'No puedes cambiar tu propio rol' });
+  }
+  const info = db.prepare('UPDATE users SET rol = ? WHERE id = ?').run(rol, id);
+  if (info.changes === 0) return reply.code(404).send({ error: 'Usuario no encontrado' });
+  return { ok: true, rol };
+});
+
+app.post('/api/admin/users/:id/reset-password', {
+  preHandler: [(app as any).adminOnly],
+  schema: {
+    params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+  },
+}, async (req: any, reply) => {
+  const id = Number(req.params.id);
+  const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(id) as { id: number; email: string } | undefined;
+  if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' });
+  // Contraseña temporal de un solo uso visible: el usuario debería cambiarla al entrar
+  const temporal = randomBytes(9).toString('base64url');
+  const hash = await hashPassword(temporal);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
+  return { ok: true, email: user.email, passwordTemporal: temporal };
+});
+
+app.delete('/api/admin/users/:id', {
+  preHandler: [(app as any).adminOnly],
+  schema: {
+    params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+  },
+}, async (req: any, reply) => {
+  const id = Number(req.params.id);
+  if (id === Number(req.user.sub)) {
+    return reply.code(400).send({ error: 'No puedes eliminar tu propia cuenta desde el panel' });
+  }
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+  if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' });
+  db.prepare('DELETE FROM attempts WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM progreso WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  return { ok: true };
+});
+
 // ---------- configuración de cuenta ----------
 
 app.patch('/api/me', {

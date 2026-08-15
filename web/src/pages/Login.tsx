@@ -22,7 +22,9 @@ export default function Login() {
         body: { email, password },
       });
       setToken(r.token);
-      navigate(next);
+      // Un admin entra a administrar, no a la vista de alumno
+      const destino = r.usuario.rol === 'admin' && next === '/rutas' ? '/admin' : next;
+      navigate(destino);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally {
