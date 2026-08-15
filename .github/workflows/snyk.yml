@@ -1,0 +1,99 @@
+name: Snyk — Análisis de dependencias
+
+# Dos disparadores con propósitos distintos:
+#  - pull_request: actúa como GATE, bloquea el merge si entra una vulnerabilidad nueva
+#  - push a main:  toma una FOTO del estado y la envía a Snyk para monitoreo continuo,
+#                  que avisa cuando aparece un CVE nuevo en una dependencia que ya tenías
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Lunes 06:00 UTC: detecta CVEs publicados sobre código que no cambió
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write   # necesario para publicar en la pestaña Security de GitHub
+
+jobs:
+  dependencias:
+    name: Vulnerabilidades en dependencias (SCA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # El árbol de dependencias debe existir antes de escanear.
+      # En Node basta el lockfile; en Python haría falta `pip install -r requirements.txt`
+      # porque requirements.txt solo declara las dependencias de primer nivel.
+      - name: Instalar dependencias
+        run: |
+          npm ci --prefix api
+          npm ci --prefix web
+
+      - name: Snyk test (falla el build con severidad alta o crítica)
+        uses: snyk/actions/node@master
+        continue-on-error: true   # no cortar aquí: primero queremos publicar el SARIF
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          # --all-projects: cyberclass tiene dos manifiestos (api/ y web/)
+          # --severity-threshold=high: ruido bajo control; medias y bajas se reportan, no bloquean
+          args: --all-projects --severity-threshold=high --sarif-file-output=snyk.sarif
+
+      - name: Publicar hallazgos en la pestaña Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk.sarif
+
+      # Este paso sí corta el build. Se separa del anterior para que los hallazgos
+      # queden publicados aunque la ejecución falle.
+      - name: Bloquear si hay vulnerabilidades altas o críticas
+        if: github.event_name == 'pull_request'
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --all-projects --severity-threshold=high
+
+      # Solo en main: registra el proyecto en Snyk para vigilancia continua.
+      # `test` mira el momento presente; `monitor` avisa hacia el futuro.
+      - name: Snyk monitor (monitoreo continuo)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+          args: --all-projects --project-name=cyberclass
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Plantilla Python — cyberclass no tiene dependencias Python, pero este es
+  # el bloque equivalente para un repo con requirements.txt. La diferencia
+  # clave está en el paso de instalación.
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  # dependencias-python:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.12'
+  #
+  #     # OBLIGATORIO en Python: requirements.txt solo lista dependencias directas.
+  #     # Sin instalar, Snyk no puede resolver las transitivas, que es donde vive
+  #     # la mayoría de las vulnerabilidades.
+  #     - run: pip install -r requirements.txt
+  #
+  #     - uses: snyk/actions/python@master
+  #       env:
+  #         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  #       with:
+  #         args: --file=requirements.txt --package-manager=pip --severity-threshold=high

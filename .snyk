@@ -1,0 +1,25 @@
+# Archivo de política de Snyk.
+# Sirve para dos cosas: silenciar hallazgos con justificación y fecha de caducidad,
+# y dejar por escrito por qué se aceptó un riesgo. Es el equivalente a un
+# "risk acceptance" auditable dentro del repo.
+#
+# Se genera solo cuando corres `snyk ignore --id=<ID>` o desde la UI de Snyk.
+version: v1.25.0
+
+# Ejemplo de la forma que toma una excepción (comentado, no hay ninguna activa):
+#
+# ignore:
+#   SNYK-JS-EJEMPLO-1234567:
+#     - '*':
+#         reason: >-
+#           No explotable: la función afectada solo se invoca en el script de
+#           build, nunca con entrada de usuario. Se levanta cuando el upstream
+#           publique el parche (issue #42).
+#         expires: 2026-11-15T00:00:00.000Z
+#         created: 2026-08-15T00:00:00.000Z
+#
+# Regla de equipo: toda excepción lleva `reason` explicando por qué NO es
+# explotable en este contexto, y `expires` a un máximo de 90 días. Sin fecha de
+# caducidad, un "ignore" se vuelve deuda de seguridad invisible.
+
+patch: {}
