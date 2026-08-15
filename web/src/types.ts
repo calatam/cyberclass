@@ -45,6 +45,38 @@ export interface AdminStats {
   intentosUltimos7Dias: number;
 }
 
+/** Pregunta con respuestas — solo la ve el panel de administración. */
+export interface PreguntaAdmin {
+  id?: number;
+  texto: string;
+  opciones: string[];
+  correcta: number;
+  explicacion: string;
+}
+
+export interface ModuloAdmin {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  xp: number;
+  preguntas: PreguntaAdmin[];
+}
+
+export interface RutaAdmin {
+  id: string;
+  dominioId: string;
+  nombre: string;
+  descripcion: string;
+  nivel: 'Básico' | 'Intermedio' | 'Avanzado';
+  proximamente?: boolean;
+  modulos: ModuloAdmin[];
+}
+
+export interface CatalogoAdmin {
+  dominios: Dominio[];
+  rutas: RutaAdmin[];
+}
+
 export interface AdminUser {
   id: number;
   email: string;

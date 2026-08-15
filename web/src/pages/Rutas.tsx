@@ -1,8 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useCatalogo } from '../catalogo-context';
+import { api, getToken } from '../api';
 import { fetchProgreso, progresoRuta, PROGRESO_VACIO } from '../store';
-import type { Progreso } from '../types';
+import type { Progreso, Usuario } from '../types';
 
 const NIVEL_COLOR: Record<string, string> = {
   'Básico': 'text-emerald-400 bg-emerald-500/10',
@@ -13,7 +14,17 @@ const NIVEL_COLOR: Record<string, string> = {
 export default function Rutas() {
   const { dominios, rutas } = useCatalogo();
   const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
-  useEffect(() => { fetchProgreso().then(setProgreso); }, []);
+  const [esAdmin, setEsAdmin] = useState(false);
+
+  useEffect(() => {
+    fetchProgreso().then(setProgreso);
+    // Para un admin, "rutas" significa gestionar contenido, no cursarlo
+    if (getToken()) {
+      api<Usuario>('/api/me').then((u) => setEsAdmin(u.rol === 'admin')).catch(() => {});
+    }
+  }, []);
+
+  if (esAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">

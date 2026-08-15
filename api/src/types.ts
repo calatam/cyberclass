@@ -1,4 +1,5 @@
 export interface Pregunta {
+  id?: number;
   texto: string;
   opciones: string[];
   correcta: number; // index into opciones

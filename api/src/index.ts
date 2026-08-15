@@ -3,7 +3,14 @@ import fjwt from '@fastify/jwt';
 import { scrypt, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { db } from './db.js';
-import { DOMINIOS, RUTAS, buscarModulo } from './catalogo.js';
+import {
+  seedCatalogo, catalogoPublico, catalogoAdmin, buscarModulo,
+  guardarPreguntas, invalidarCache, slugify, type PreguntaEntrada,
+} from './contenido.js';
+
+// El contenido vive en la BD para poder editarlo desde el panel; la primera
+// vez se siembra desde catalogo.ts.
+seedCatalogo();
 
 const scryptAsync = promisify(scrypt) as (pwd: string, salt: string, len: number) => Promise<Buffer>;
 
@@ -214,6 +221,161 @@ app.delete('/api/admin/users/:id', {
   return { ok: true };
 });
 
+// ---------- gestión de contenido (solo rol admin) ----------
+
+app.get('/api/admin/catalogo', { preHandler: [(app as any).adminOnly] }, async () => catalogoAdmin());
+
+const RUTA_BODY = {
+  type: 'object',
+  properties: {
+    nombre: { type: 'string', minLength: 2, maxLength: 120 },
+    descripcion: { type: 'string', maxLength: 500 },
+    dominioId: { type: 'string', minLength: 1, maxLength: 60 },
+    nivel: { type: 'string', enum: ['Básico', 'Intermedio', 'Avanzado'] },
+    proximamente: { type: 'boolean' },
+  },
+} as const;
+
+app.post('/api/admin/rutas', {
+  preHandler: [(app as any).adminOnly],
+  schema: { body: { ...RUTA_BODY, required: ['nombre', 'dominioId'] } },
+}, async (req: any, reply) => {
+  const { nombre, descripcion = '', dominioId, nivel = 'Básico', proximamente = false } = req.body;
+  const dominio = db.prepare('SELECT id FROM dominios WHERE id = ?').get(dominioId);
+  if (!dominio) return reply.code(400).send({ error: 'Dominio no existe' });
+  const id = slugify(nombre);
+  const maxOrden = (db.prepare('SELECT COALESCE(MAX(orden), -1) o FROM rutas').get() as { o: number }).o;
+  db.prepare('INSERT INTO rutas (id, dominio_id, nombre, descripcion, nivel, proximamente, orden) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, dominioId, nombre.trim(), descripcion.trim(), nivel, proximamente ? 1 : 0, maxOrden + 1);
+  invalidarCache();
+  return { ok: true, id };
+});
+
+app.put('/api/admin/rutas/:id', {
+  preHandler: [(app as any).adminOnly],
+  schema: {
+    params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+    body: { ...RUTA_BODY, required: ['nombre', 'dominioId', 'nivel'] },
+  },
+}, async (req: any, reply) => {
+  const { nombre, descripcion = '', dominioId, nivel, proximamente = false } = req.body;
+  const info = db.prepare('UPDATE rutas SET nombre = ?, descripcion = ?, dominio_id = ?, nivel = ?, proximamente = ? WHERE id = ?')
+    .run(nombre.trim(), descripcion.trim(), dominioId, nivel, proximamente ? 1 : 0, req.params.id);
+  if (info.changes === 0) return reply.code(404).send({ error: 'Ruta no encontrada' });
+  invalidarCache();
+  return { ok: true };
+});
+
+app.delete('/api/admin/rutas/:id', {
+  preHandler: [(app as any).adminOnly],
+  schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+}, async (req: any, reply) => {
+  const rutaId = req.params.id as string;
+  const ruta = db.prepare('SELECT id FROM rutas WHERE id = ?').get(rutaId);
+  if (!ruta) return reply.code(404).send({ error: 'Ruta no encontrada' });
+  const modulos = db.prepare('SELECT id FROM modulos WHERE ruta_id = ?').all(rutaId) as unknown as { id: string }[];
+  for (const m of modulos) {
+    db.prepare('DELETE FROM preguntas WHERE modulo_id = ?').run(m.id);
+    db.prepare('DELETE FROM progreso WHERE modulo_id = ?').run(m.id);
+    db.prepare('DELETE FROM attempts WHERE modulo_id = ?').run(m.id);
+  }
+  db.prepare('DELETE FROM modulos WHERE ruta_id = ?').run(rutaId);
+  db.prepare('DELETE FROM rutas WHERE id = ?').run(rutaId);
+  invalidarCache();
+  return { ok: true, modulosEliminados: modulos.length };
+});
+
+const PREGUNTAS_SCHEMA = {
+  type: 'array',
+  maxItems: 50,
+  items: {
+    type: 'object',
+    required: ['texto', 'opciones', 'correcta'],
+    properties: {
+      texto: { type: 'string', minLength: 3, maxLength: 1000 },
+      opciones: { type: 'array', minItems: 2, maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 500 } },
+      correcta: { type: 'integer', minimum: 0 },
+      explicacion: { type: 'string', maxLength: 1000 },
+    },
+  },
+} as const;
+
+app.post('/api/admin/rutas/:id/modulos', {
+  preHandler: [(app as any).adminOnly],
+  schema: {
+    params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+    body: {
+      type: 'object',
+      required: ['titulo'],
+      properties: {
+        titulo: { type: 'string', minLength: 2, maxLength: 160 },
+        descripcion: { type: 'string', maxLength: 500 },
+        xp: { type: 'integer', minimum: 0, maximum: 1000 },
+      },
+    },
+  },
+}, async (req: any, reply) => {
+  const rutaId = req.params.id as string;
+  const ruta = db.prepare('SELECT id FROM rutas WHERE id = ?').get(rutaId);
+  if (!ruta) return reply.code(404).send({ error: 'Ruta no encontrada' });
+  const { titulo, descripcion = '', xp = 100 } = req.body;
+  const id = slugify(titulo, rutaId.slice(0, 12));
+  const maxOrden = (db.prepare('SELECT COALESCE(MAX(orden), -1) o FROM modulos WHERE ruta_id = ?').get(rutaId) as { o: number }).o;
+  db.prepare('INSERT INTO modulos (id, ruta_id, titulo, descripcion, xp, orden) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, rutaId, titulo.trim(), descripcion.trim(), xp, maxOrden + 1);
+  invalidarCache();
+  return { ok: true, id };
+});
+
+app.put('/api/admin/modulos/:id', {
+  preHandler: [(app as any).adminOnly],
+  schema: {
+    params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+    body: {
+      type: 'object',
+      required: ['titulo', 'preguntas'],
+      properties: {
+        titulo: { type: 'string', minLength: 2, maxLength: 160 },
+        descripcion: { type: 'string', maxLength: 500 },
+        xp: { type: 'integer', minimum: 0, maximum: 1000 },
+        preguntas: PREGUNTAS_SCHEMA,
+      },
+    },
+  },
+}, async (req: any, reply) => {
+  const moduloId = req.params.id as string;
+  const modulo = db.prepare('SELECT id FROM modulos WHERE id = ?').get(moduloId);
+  if (!modulo) return reply.code(404).send({ error: 'Módulo no encontrado' });
+  const { titulo, descripcion = '', xp = 100, preguntas } = req.body as {
+    titulo: string; descripcion: string; xp: number; preguntas: PreguntaEntrada[];
+  };
+  // La respuesta correcta debe apuntar a una opción existente
+  for (const [i, p] of preguntas.entries()) {
+    if (p.correcta >= p.opciones.length) {
+      return reply.code(400).send({ error: `Pregunta ${i + 1}: la respuesta correcta no corresponde a una opción` });
+    }
+  }
+  db.prepare('UPDATE modulos SET titulo = ?, descripcion = ?, xp = ? WHERE id = ?')
+    .run(titulo.trim(), descripcion.trim(), xp, moduloId);
+  guardarPreguntas(moduloId, preguntas.map((p) => ({ ...p, explicacion: p.explicacion ?? '' })));
+  return { ok: true, preguntas: preguntas.length };
+});
+
+app.delete('/api/admin/modulos/:id', {
+  preHandler: [(app as any).adminOnly],
+  schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+}, async (req: any, reply) => {
+  const moduloId = req.params.id as string;
+  const modulo = db.prepare('SELECT id FROM modulos WHERE id = ?').get(moduloId);
+  if (!modulo) return reply.code(404).send({ error: 'Módulo no encontrado' });
+  db.prepare('DELETE FROM preguntas WHERE modulo_id = ?').run(moduloId);
+  db.prepare('DELETE FROM progreso WHERE modulo_id = ?').run(moduloId);
+  db.prepare('DELETE FROM attempts WHERE modulo_id = ?').run(moduloId);
+  db.prepare('DELETE FROM modulos WHERE id = ?').run(moduloId);
+  invalidarCache();
+  return { ok: true };
+});
+
 // ---------- configuración de cuenta ----------
 
 app.patch('/api/me', {
@@ -259,18 +421,7 @@ app.post('/api/auth/password', {
 
 // ---------- catálogo (público, SIN respuestas correctas ni explicaciones) ----------
 
-const CATALOGO_PUBLICO = {
-  dominios: DOMINIOS,
-  rutas: RUTAS.map((r) => ({
-    ...r,
-    modulos: r.modulos.map((m) => ({
-      ...m,
-      preguntas: m.preguntas.map((p) => ({ texto: p.texto, opciones: p.opciones })),
-    })),
-  })),
-};
-
-app.get('/api/catalogo', async () => CATALOGO_PUBLICO);
+app.get('/api/catalogo', async () => catalogoPublico());
 
 // ---------- evaluación (el servidor valida; las respuestas nunca viajan al cliente) ----------
 

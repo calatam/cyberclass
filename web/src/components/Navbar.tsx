@@ -44,13 +44,14 @@ export default function Navbar() {
           Cyber<span className="text-emerald-400">Class</span>
         </Link>
         <div className="flex items-center gap-0.5 sm:gap-1 min-w-0">
-          {link('/rutas', 'Rutas')}
+          {/* El admin gestiona contenido; no navega el catálogo como alumno */}
+          {usuario?.rol !== 'admin' && link('/rutas', 'Rutas')}
           {usuario ? (
             <>
               {usuario.rol === 'admin' ? (
                 <>
-                  {/* El admin gestiona la plataforma: sin XP ni gamificación */}
-                  {link('/admin', 'Admin')}
+                  {/* Sin XP ni gamificación: administrar no es aprender */}
+                  {link('/admin', 'Panel')}
                   {link('/perfil', 'Cuenta')}
                   <span className="hidden sm:block shrink-0 px-2 py-0.5 rounded-md text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30">
                     admin
