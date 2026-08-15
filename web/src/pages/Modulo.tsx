@@ -88,6 +88,36 @@ export default function Modulo() {
   };
 
   if (resultado) {
+    // Modo previsualización (admin): se corrige el cuestionario pero no hay progreso ni XP
+    if (resultado.preview) {
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <div className="text-6xl mb-4">👁️</div>
+          <h1 className="font-display text-3xl font-bold text-gray-100 mb-2">Previsualización</h1>
+          <p className="text-gray-400 mb-2">
+            Respuestas correctas: <span className="text-gray-100 font-semibold">{resultado.score} de {resultado.total}</span> ({resultado.pct}%).
+          </p>
+          <p className="text-sm text-amber-400 mb-6">
+            Cuenta de administración: no se registró progreso ni XP.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={reintentar}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] font-semibold transition-colors"
+            >
+              Revisar de nuevo
+            </button>
+            <button
+              onClick={() => navigate(`/ruta/${ruta.id}`)}
+              className="px-5 py-2.5 rounded-xl border border-[#30363d] hover:border-gray-500 text-gray-200 font-semibold transition-colors"
+            >
+              Volver a la ruta
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <div className="text-6xl mb-4">{resultado.aprobado ? '🎉' : '📚'}</div>

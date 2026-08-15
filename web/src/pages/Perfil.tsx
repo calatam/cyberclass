@@ -9,6 +9,7 @@ export default function Perfil() {
   const { rutas } = useCatalogo();
   const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [cargando, setCargando] = useState(true);
 
   // Configuración: cambiar nombre
   const [nombre, setNombre] = useState('');
@@ -27,7 +28,9 @@ export default function Perfil() {
       api<Usuario>('/api/me').then((u) => {
         setUsuario(u);
         setNombre(u.nombre);
-      }).catch(() => setUsuario(null));
+      }).catch(() => setUsuario(null)).finally(() => setCargando(false));
+    } else {
+      setCargando(false);
     }
   }, []);
 
@@ -91,6 +94,83 @@ export default function Perfil() {
     .filter((x) => x.pr.hechos > 0);
 
   const inputCls = 'w-full px-3 py-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-gray-100 focus:border-emerald-500 focus:outline-none';
+
+  const seccionConfiguracion = (
+    <section>
+      <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">⚙️ Configuración</h2>
+      <div className="grid md:grid-cols-2 gap-5">
+        {/* Cambiar nombre */}
+        <form onSubmit={guardarNombre} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5">
+          <h3 className="font-semibold text-gray-100 mb-3">Cambiar nombre</h3>
+          <label htmlFor="cfg-nombre" className="block text-sm text-gray-300 mb-1.5">Nombre</label>
+          <input
+            id="cfg-nombre" type="text" required minLength={2} value={nombre}
+            onChange={(e) => setNombre(e.target.value)} className={inputCls}
+          />
+          {msgNombre && (
+            <p className={`text-sm mt-2 ${msgNombre.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{msgNombre.texto}</p>
+          )}
+          <button
+            type="submit" disabled={guardandoNombre}
+            className="mt-4 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] text-sm font-semibold transition-colors"
+          >
+            {guardandoNombre ? 'Guardando…' : 'Guardar'}
+          </button>
+        </form>
+
+        {/* Cambiar contraseña */}
+        <form onSubmit={cambiarPassword} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5">
+          <h3 className="font-semibold text-gray-100 mb-3">Cambiar contraseña</h3>
+          <label htmlFor="cfg-pass-actual" className="block text-sm text-gray-300 mb-1.5">Contraseña actual</label>
+          <input
+            id="cfg-pass-actual" type="password" required value={passActual}
+            onChange={(e) => setPassActual(e.target.value)} className={inputCls}
+          />
+          <label htmlFor="cfg-pass-nueva" className="block text-sm text-gray-300 mb-1.5 mt-3">Contraseña nueva (mín. 8)</label>
+          <input
+            id="cfg-pass-nueva" type="password" required minLength={8} value={passNueva}
+            onChange={(e) => setPassNueva(e.target.value)} className={inputCls}
+          />
+          {msgPass && (
+            <p className={`text-sm mt-2 ${msgPass.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{msgPass.texto}</p>
+          )}
+          <button
+            type="submit" disabled={guardandoPass}
+            className="mt-4 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] text-sm font-semibold transition-colors"
+          >
+            {guardandoPass ? 'Cambiando…' : 'Cambiar contraseña'}
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+
+  if (cargando) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-gray-500 animate-pulse">Cargando…</div>
+      </div>
+    );
+  }
+
+  // Vista de administrador: cuenta y configuración, sin gamificación de alumno
+  if (usuario?.rol === 'admin') {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        <h1 className="font-display text-4xl font-bold text-gray-100 mb-1">Mi Cuenta</h1>
+        <p className="text-gray-400 mb-8 flex items-center gap-2">
+          {usuario.nombre} · {usuario.email}
+          <span className="text-xs px-2 py-0.5 rounded-md font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30">admin</span>
+        </p>
+        <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 mb-10 text-sm text-gray-400">
+          Esta es una cuenta de <span className="text-amber-400 font-medium">administración</span>: gestiona la plataforma desde el{' '}
+          <Link to="/admin" className="text-emerald-400 hover:underline">panel de administración</Link>. No acumula XP ni progreso de alumno;
+          puedes abrir los módulos para previsualizar el contenido sin que se registren intentos.
+        </div>
+        {seccionConfiguracion}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
@@ -162,54 +242,7 @@ export default function Perfil() {
         )}
       </section>
 
-      {/* Configuración */}
-      <section>
-        <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">⚙️ Configuración</h2>
-        <div className="grid md:grid-cols-2 gap-5">
-          {/* Cambiar nombre */}
-          <form onSubmit={guardarNombre} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5">
-            <h3 className="font-semibold text-gray-100 mb-3">Cambiar nombre</h3>
-            <label htmlFor="cfg-nombre" className="block text-sm text-gray-300 mb-1.5">Nombre</label>
-            <input
-              id="cfg-nombre" type="text" required minLength={2} value={nombre}
-              onChange={(e) => setNombre(e.target.value)} className={inputCls}
-            />
-            {msgNombre && (
-              <p className={`text-sm mt-2 ${msgNombre.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{msgNombre.texto}</p>
-            )}
-            <button
-              type="submit" disabled={guardandoNombre}
-              className="mt-4 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] text-sm font-semibold transition-colors"
-            >
-              {guardandoNombre ? 'Guardando…' : 'Guardar'}
-            </button>
-          </form>
-
-          {/* Cambiar contraseña */}
-          <form onSubmit={cambiarPassword} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5">
-            <h3 className="font-semibold text-gray-100 mb-3">Cambiar contraseña</h3>
-            <label htmlFor="cfg-pass-actual" className="block text-sm text-gray-300 mb-1.5">Contraseña actual</label>
-            <input
-              id="cfg-pass-actual" type="password" required value={passActual}
-              onChange={(e) => setPassActual(e.target.value)} className={inputCls}
-            />
-            <label htmlFor="cfg-pass-nueva" className="block text-sm text-gray-300 mb-1.5 mt-3">Contraseña nueva (mín. 8)</label>
-            <input
-              id="cfg-pass-nueva" type="password" required minLength={8} value={passNueva}
-              onChange={(e) => setPassNueva(e.target.value)} className={inputCls}
-            />
-            {msgPass && (
-              <p className={`text-sm mt-2 ${msgPass.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{msgPass.texto}</p>
-            )}
-            <button
-              type="submit" disabled={guardandoPass}
-              className="mt-4 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] text-sm font-semibold transition-colors"
-            >
-              {guardandoPass ? 'Cambiando…' : 'Cambiar contraseña'}
-            </button>
-          </form>
-        </div>
-      </section>
+      {seccionConfiguracion}
     </div>
   );
 }

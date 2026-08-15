@@ -81,4 +81,5 @@ export interface ResultadoIntento {
   aprobado: boolean;
   xpGanado: number;
   xpTotal: number;
+  preview?: boolean; // true cuando un admin previsualiza: no se registra progreso
 }

@@ -140,7 +140,7 @@ app.get('/api/me', { preHandler: [(app as any).auth] }, async (req: any, reply) 
 // ---------- administración (solo rol admin) ----------
 
 app.get('/api/admin/stats', { preHandler: [(app as any).adminOnly] }, async () => {
-  const usuarios = (db.prepare('SELECT COUNT(*) c FROM users').get() as { c: number }).c;
+  const usuarios = (db.prepare("SELECT COUNT(*) c FROM users WHERE rol = 'alumno'").get() as { c: number }).c;
   const intentos = (db.prepare('SELECT COUNT(*) c FROM attempts').get() as { c: number }).c;
   const modulosAprobados = (db.prepare('SELECT COUNT(*) c FROM progreso WHERE score * 1.0 / total >= 0.7').get() as { c: number }).c;
   const xpTotal = (db.prepare('SELECT COALESCE(SUM(xp), 0) s FROM users').get() as { s: number }).s;
@@ -326,6 +326,14 @@ app.post('/api/attempts', {
   const score = respuestas.reduce((s, r, i) => s + (r === modulo.preguntas[i].correcta ? 1 : 0), 0);
   const total = modulo.preguntas.length;
   const aprobado = score / total >= 0.7;
+
+  // Los admins previsualizan contenido: se califica pero NO se registra
+  // progreso ni se otorga XP (no participan como alumnos)
+  const actor = db.prepare('SELECT rol, xp FROM users WHERE id = ?').get(userId) as { rol: string; xp: number } | undefined;
+  if (!actor) return reply.code(401).send({ error: 'Usuario no existe' });
+  if (actor.rol === 'admin') {
+    return { score, total, pct: Math.round((score / total) * 100), aprobado, xpGanado: 0, xpTotal: actor.xp, preview: true };
+  }
 
   db.prepare('INSERT INTO attempts (user_id, modulo_id, score, total) VALUES (?, ?, ?, ?)')
     .run(userId, moduloId, score, total);

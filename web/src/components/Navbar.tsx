@@ -47,11 +47,23 @@ export default function Navbar() {
           {link('/rutas', 'Rutas')}
           {usuario ? (
             <>
-              {link('/perfil', 'Perfil')}
-              {usuario.rol === 'admin' && link('/admin', 'Admin')}
-              <div className="shrink-0 px-2 sm:px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-semibold whitespace-nowrap">
-                ⚡ {usuario.xp}
-              </div>
+              {usuario.rol === 'admin' ? (
+                <>
+                  {/* El admin gestiona la plataforma: sin XP ni gamificación */}
+                  {link('/admin', 'Admin')}
+                  {link('/perfil', 'Cuenta')}
+                  <span className="hidden sm:block shrink-0 px-2 py-0.5 rounded-md text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30">
+                    admin
+                  </span>
+                </>
+              ) : (
+                <>
+                  {link('/perfil', 'Perfil')}
+                  <div className="shrink-0 px-2 sm:px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-semibold whitespace-nowrap">
+                    ⚡ {usuario.xp}
+                  </div>
+                </>
+              )}
               <span className="hidden lg:block ml-2 text-sm text-gray-400 truncate max-w-32">{usuario.nombre}</span>
               <button
                 onClick={salir}
