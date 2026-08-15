@@ -64,9 +64,22 @@ web/src/
   pages/          Landing, Rutas, RutaDetalle, Modulo, Perfil, Login, Registro
 ```
 
-## Agregar contenido
+## Contenido: dónde vive y cómo se edita
 
-Todo el contenido vive en [`api/src/catalogo.ts`](api/src/catalogo.ts) (incluye respuestas correctas y explicaciones). Agrega módulos/rutas ahí, `npm run build` y redespliega — el frontend lo consume automáticamente.
+En ejecución el contenido (dominios → rutas → módulos → preguntas) vive en **SQLite** y se edita desde el navegador en `/admin` → pestaña **Contenido**. Los cambios son instantáneos: no hay que redesplegar.
+
+[`api/src/catalogo.ts`](api/src/catalogo.ts) es la **semilla versionada**: se carga automáticamente la primera vez que arranca contra una base vacía, y queda en Git como copia de respaldo y ejemplo de la estructura de datos.
+
+**Traer a Git lo editado en producción** (para que GitHub siga siendo la copia versionada del curso):
+
+```bash
+ADMIN_EMAIL=admin@calatam.com ADMIN_PASSWORD='tu-clave' node scripts/export-catalogo.mjs
+git add api/src/catalogo.ts && git commit -m "content: actualiza catálogo desde el panel"
+```
+
+El script regenera `catalogo.ts` desde el contenido vivo. Apunta a producción por defecto; usa `CYBERCLASS_URL=http://localhost:3001` para exportar desde local.
+
+**Roles**: `alumno` cursa y acumula XP; `admin` gestiona contenido y cuentas, no acumula progreso y al abrir un módulo entra en modo previsualización.
 
 ## Deploy
 
