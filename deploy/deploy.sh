@@ -2,44 +2,102 @@
 set -euo pipefail
 
 # ============================================
-# CyberClass — Deploy a la VM de GCP
-# Sirve https://cyberclass.calatam.com con nginx + Let's Encrypt
+# CyberClass — Deploy full-stack a la VM de GCP
+# Frontend: /var/www/cyberclass (nginx)
+# Backend:  /opt/cyberclass-api (systemd, puerto 3001)
+# https://cyberclass.calatam.com
 # ============================================
 #
-# Requisitos previos (una sola vez):
-#   1. Registro DNS en GoDaddy:  A  cyberclass  ->  34.176.202.215
-#   2. Acceso SSH a la VM con la llave google_compute_engine
+# Requisitos: gcloud autenticado (usa túnel IAP, funciona aunque
+# la IP esté baneada por fail2ban).
 #
-# Uso:
-#   ./deploy/deploy.sh            # build + subir + (primera vez) configurar nginx/SSL
-#
-# Variables:
-VM_IP="${VM_IP:-34.176.202.215}"
-VM_USER="${VM_USER:-juanpablolefian}"
-KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
+# Uso:  ./deploy/deploy.sh
+
+ZONE="southamerica-west1-a"
+VM="geocompliance-web"
 DOMAIN="cyberclass.calatam.com"
-WEB_DIR="$(cd "$(dirname "$0")/.." && pwd)/web"
-SSH="ssh -i $KEY -o StrictHostKeyChecking=no ${VM_USER}@${VM_IP}"
-SCP="scp -i $KEY -o StrictHostKeyChecking=no"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+GSSH() { gcloud compute ssh "$VM" --zone="$ZONE" --tunnel-through-iap --command="$1"; }
 
-echo "==> [1/5] Build del frontend"
-cd "$WEB_DIR"
-npm ci --silent
-npm run build
+echo "==> [1/6] Build frontend"
+cd "$ROOT/web" && npm ci --silent && npm run build
 
-echo "==> [2/5] Subir build a /tmp de la VM"
-$SSH "rm -rf /tmp/cyberclass-deploy && mkdir -p /tmp/cyberclass-deploy"
-$SCP -r dist/* "${VM_USER}@${VM_IP}:/tmp/cyberclass-deploy/"
+echo "==> [2/6] Build backend"
+cd "$ROOT/api" && npm ci --silent && npm run build
 
-echo "==> [3/5] Mover a /var/www/cyberclass"
-$SSH "sudo mkdir -p /var/www/cyberclass && sudo rm -rf /var/www/cyberclass/* && sudo cp -r /tmp/cyberclass-deploy/* /var/www/cyberclass/ && sudo chown -R www-data:www-data /var/www/cyberclass && rm -rf /tmp/cyberclass-deploy"
+echo "==> [3/6] Empaquetar y subir (tarball por SSH, robusto en IAP)"
+cd "$ROOT"
+tar czf /tmp/cyberclass-web.tgz -C web/dist .
+tar czf /tmp/cyberclass-api.tgz -C api dist package.json package-lock.json
+cat /tmp/cyberclass-web.tgz | GSSH "cat > /tmp/cyberclass-web.tgz"
+cat /tmp/cyberclass-api.tgz | GSSH "cat > /tmp/cyberclass-api.tgz"
 
-echo "==> [4/5] Configurar nginx (idempotente)"
-$SCP "$(dirname "$0")/nginx-cyberclass.conf" "${VM_USER}@${VM_IP}:/tmp/nginx-cyberclass.conf"
-$SSH "sudo mv /tmp/nginx-cyberclass.conf /etc/nginx/sites-available/cyberclass && sudo ln -sf /etc/nginx/sites-available/cyberclass /etc/nginx/sites-enabled/cyberclass && sudo nginx -t && sudo systemctl reload nginx"
+echo "==> [4/6] Instalar backend (Node + npm ci + systemd)"
+GSSH "
+set -e
+# Node 24 LTS si no existe
+if ! command -v node >/dev/null; then
+  curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash - >/dev/null
+  sudo apt-get install -y nodejs >/dev/null
+fi
+sudo mkdir -p /opt/cyberclass-api /var/lib/cyberclass
+sudo tar xzf /tmp/cyberclass-api.tgz -C /opt/cyberclass-api
+cd /opt/cyberclass-api && sudo npm ci --omit=dev --silent
+sudo chown -R www-data:www-data /var/lib/cyberclass
+# Env file con JWT_SECRET (solo la primera vez)
+if [ ! -f /etc/cyberclass-api.env ]; then
+  echo \"JWT_SECRET=\$(openssl rand -hex 32)
+DB_PATH=/var/lib/cyberclass/app.db
+PORT=3001\" | sudo tee /etc/cyberclass-api.env >/dev/null
+  sudo chmod 600 /etc/cyberclass-api.env
+fi
+# Unidad systemd
+sudo tee /etc/systemd/system/cyberclass-api.service >/dev/null <<'UNIT'
+[Unit]
+Description=CyberClass API (Fastify + SQLite)
+After=network.target
 
-echo "==> [5/5] SSL con Let's Encrypt (si aún no existe)"
-$SSH "sudo certbot certificates 2>/dev/null | grep -q $DOMAIN || sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m jplefian@gmail.com --redirect"
+[Service]
+Type=simple
+User=www-data
+EnvironmentFile=/etc/cyberclass-api.env
+WorkingDirectory=/opt/cyberclass-api
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cyberclass
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload
+sudo systemctl enable cyberclass-api >/dev/null 2>&1
+sudo systemctl restart cyberclass-api
+sleep 1 && sudo systemctl is-active cyberclass-api
+"
+
+echo "==> [5/6] Frontend + nginx"
+GSSH "
+set -e
+sudo mkdir -p /var/www/cyberclass
+sudo rm -rf /var/www/cyberclass/*
+sudo tar xzf /tmp/cyberclass-web.tgz -C /var/www/cyberclass
+sudo chown -R www-data:www-data /var/www/cyberclass
+# Agregar proxy /api si no existe (idempotente)
+if ! grep -q 'location /api/' /etc/nginx/sites-available/cyberclass; then
+  sudo sed -i 's|root /var/www/cyberclass;|root /var/www/cyberclass;\n    location /api/ { proxy_pass http://127.0.0.1:3001; proxy_http_version 1.1; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-Proto \$scheme; }|' /etc/nginx/sites-available/cyberclass
+fi
+sudo nginx -t && sudo systemctl reload nginx
+rm -f /tmp/cyberclass-web.tgz /tmp/cyberclass-api.tgz
+"
+
+echo "==> [6/6] Verificación"
+sleep 2
+curl -s -o /dev/null -w "  Frontend: HTTP %{http_code}\n" "https://$DOMAIN/"
+curl -s "https://$DOMAIN/api/health" && echo "  API: OK"
 
 echo ""
 echo "✅ Deploy completo: https://$DOMAIN"

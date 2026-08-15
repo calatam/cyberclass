@@ -1,18 +1,28 @@
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { buscarModulo } from '../catalogo';
-import { completarModulo } from '../store';
+import { useCatalogo, buscarModulo } from '../catalogo-context';
+import { api, getToken } from '../api';
+import type { RespuestaFeedback, ResultadoIntento } from '../types';
 
 export default function Modulo() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const encontrado = id ? buscarModulo(id) : null;
+  const loc = useLocation();
+  const { rutas } = useCatalogo();
+  const encontrado = id ? buscarModulo(rutas, id) : null;
 
   const [idx, setIdx] = useState(0);
   const [seleccion, setSeleccion] = useState<number | null>(null);
-  const [confirmado, setConfirmado] = useState(false);
+  const [feedback, setFeedback] = useState<RespuestaFeedback | null>(null);
   const [respuestas, setRespuestas] = useState<number[]>([]);
-  const [terminado, setTerminado] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoIntento | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+
+  // Los cuestionarios requieren sesión: la validación ocurre en el servidor
+  if (!getToken()) {
+    return <Navigate to="/login" state={{ next: loc.pathname }} replace />;
+  }
 
   if (!encontrado) {
     return (
@@ -27,44 +37,76 @@ export default function Modulo() {
   const pregunta = modulo.preguntas[idx];
   const esUltima = idx === modulo.preguntas.length - 1;
 
-  const confirmar = () => {
-    if (seleccion === null) return;
-    setConfirmado(true);
-    setRespuestas((r) => [...r, seleccion]);
-  };
-
-  const siguiente = () => {
-    if (esUltima) {
-      const finales = [...respuestas];
-      const score = finales.reduce((s, resp, i) => s + (resp === modulo.preguntas[i].correcta ? 1 : 0), 0);
-      completarModulo(modulo.id, score, modulo.preguntas.length, modulo.xp);
-      setTerminado(true);
-    } else {
-      setIdx((i) => i + 1);
-      setSeleccion(null);
-      setConfirmado(false);
+  const confirmar = async () => {
+    if (seleccion === null || cargando) return;
+    setCargando(true);
+    setError('');
+    try {
+      const fb = await api<RespuestaFeedback>('/api/answer', {
+        method: 'POST',
+        body: { moduloId: modulo.id, pregunta: idx, seleccion },
+      });
+      setFeedback(fb);
+      setRespuestas((r) => [...r, seleccion]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al validar la respuesta');
+    } finally {
+      setCargando(false);
     }
   };
 
-  if (terminado) {
-    const score = respuestas.reduce((s, resp, i) => s + (resp === modulo.preguntas[i].correcta ? 1 : 0), 0);
-    const total = modulo.preguntas.length;
-    const pct = Math.round((score / total) * 100);
-    const aprobado = pct >= 70;
+  const siguiente = async () => {
+    if (cargando) return;
+    if (esUltima) {
+      setCargando(true);
+      setError('');
+      try {
+        const res = await api<ResultadoIntento>('/api/attempts', {
+          method: 'POST',
+          body: { moduloId: modulo.id, respuestas },
+        });
+        setResultado(res);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al enviar el intento');
+      } finally {
+        setCargando(false);
+      }
+    } else {
+      setIdx((i) => i + 1);
+      setSeleccion(null);
+      setFeedback(null);
+    }
+  };
+
+  const reintentar = () => {
+    setIdx(0);
+    setSeleccion(null);
+    setFeedback(null);
+    setRespuestas([]);
+    setResultado(null);
+    setError('');
+  };
+
+  if (resultado) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="text-6xl mb-4">{aprobado ? '🎉' : '📚'}</div>
+        <div className="text-6xl mb-4">{resultado.aprobado ? '🎉' : '📚'}</div>
         <h1 className="font-display text-3xl font-bold text-gray-100 mb-2">
-          {aprobado ? '¡Módulo aprobado!' : 'Sigue practicando'}
+          {resultado.aprobado ? '¡Módulo aprobado!' : 'Sigue practicando'}
         </h1>
-        <p className="text-gray-400 mb-6">
-          Obtuviste <span className="text-gray-100 font-semibold">{score} de {total}</span> ({pct}%).
-          {aprobado ? ` Ganaste ⚡ ${modulo.xp} XP.` : ' Necesitas 70% para aprobar.'}
+        <p className="text-gray-400 mb-2">
+          Obtuviste <span className="text-gray-100 font-semibold">{resultado.score} de {resultado.total}</span> ({resultado.pct}%).
+          {resultado.aprobado
+            ? resultado.xpGanado > 0
+              ? ` Ganaste ⚡ ${resultado.xpGanado} XP.`
+              : ' (Ya habías ganado el XP de este módulo.)'
+            : ' Necesitas 70% para aprobar.'}
         </p>
+        <p className="text-sm text-emerald-400 mb-6">XP total: ⚡ {resultado.xpTotal}</p>
         <div className="flex items-center justify-center gap-3">
-          {!aprobado && (
+          {!resultado.aprobado && (
             <button
-              onClick={() => { setIdx(0); setSeleccion(null); setConfirmado(false); setRespuestas([]); setTerminado(false); }}
+              onClick={reintentar}
               className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] font-semibold transition-colors"
             >
               Reintentar
@@ -81,8 +123,6 @@ export default function Modulo() {
     );
   }
 
-  const esCorrecta = (i: number) => i === pregunta.correcta;
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-6">
@@ -91,7 +131,10 @@ export default function Modulo() {
       </div>
 
       <div className="h-1.5 rounded-full bg-[#161b22] overflow-hidden mb-8">
-        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((idx + (confirmado ? 1 : 0)) / modulo.preguntas.length) * 100}%` }} />
+        <div
+          className="h-full bg-emerald-500 transition-all"
+          style={{ width: `${((idx + (feedback ? 1 : 0)) / modulo.preguntas.length) * 100}%` }}
+        />
       </div>
 
       <h1 className="font-display text-xl font-bold text-gray-100 mb-6">{pregunta.texto}</h1>
@@ -99,8 +142,8 @@ export default function Modulo() {
       <div className="space-y-3 mb-6">
         {pregunta.opciones.map((op, i) => {
           let cls = 'border-[#30363d] hover:border-gray-500 text-gray-200';
-          if (confirmado) {
-            if (esCorrecta(i)) cls = 'border-emerald-500 bg-emerald-500/10 text-emerald-300';
+          if (feedback) {
+            if (i === feedback.correctaIdx) cls = 'border-emerald-500 bg-emerald-500/10 text-emerald-300';
             else if (i === seleccion) cls = 'border-rose-500 bg-rose-500/10 text-rose-300';
             else cls = 'border-[#30363d] text-gray-500';
           } else if (i === seleccion) {
@@ -109,42 +152,45 @@ export default function Modulo() {
           return (
             <button
               key={i}
-              disabled={confirmado}
+              disabled={!!feedback || cargando}
               onClick={() => setSeleccion(i)}
               className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${cls}`}
             >
               <span className="inline-block w-6 font-semibold">{String.fromCharCode(65 + i)}.</span>
               {op}
-              {confirmado && esCorrecta(i) && <span className="float-right">✓</span>}
-              {confirmado && i === seleccion && !esCorrecta(i) && <span className="float-right">✗</span>}
+              {feedback && i === feedback.correctaIdx && <span className="float-right">✓</span>}
+              {feedback && i === seleccion && !feedback.esCorrecta && i !== feedback.correctaIdx && <span className="float-right">✗</span>}
             </button>
           );
         })}
       </div>
 
-      {confirmado && (
+      {feedback && (
         <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 mb-6">
           <div className="text-sm font-semibold text-gray-200 mb-1">
-            {seleccion === pregunta.correcta ? '✅ Correcto' : '❌ Incorrecto'}
+            {feedback.esCorrecta ? '✅ Correcto' : '❌ Incorrecto'}
           </div>
-          <p className="text-sm text-gray-400">{pregunta.explicacion}</p>
+          <p className="text-sm text-gray-400">{feedback.explicacion}</p>
         </div>
       )}
 
-      {!confirmado ? (
+      {error && <p className="text-sm text-rose-400 mb-4">{error}</p>}
+
+      {!feedback ? (
         <button
           onClick={confirmar}
-          disabled={seleccion === null}
+          disabled={seleccion === null || cargando}
           className="w-full px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-[#0d1117] font-semibold transition-colors"
         >
-          Confirmar respuesta
+          {cargando ? 'Validando…' : 'Confirmar respuesta'}
         </button>
       ) : (
         <button
           onClick={siguiente}
-          className="w-full px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] font-semibold transition-colors"
+          disabled={cargando}
+          className="w-full px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-[#0d1117] font-semibold transition-colors"
         >
-          {esUltima ? 'Ver resultado' : 'Siguiente pregunta →'}
+          {cargando ? 'Enviando…' : esUltima ? 'Ver resultado' : 'Siguiente pregunta →'}
         </button>
       )}
     </div>

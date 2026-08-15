@@ -1,55 +1,80 @@
 # CyberClass 🛡️
 
-Plataforma de cursos interactivos de ciberseguridad de **CA LATAM**. Rutas de aprendizaje con cuestionarios, sistema de XP e insignias. Todo el progreso se guarda localmente en el navegador (sin backend).
+Plataforma full-stack de cursos interactivos de ciberseguridad de **CA LATAM**. Rutas de aprendizaje con cuestionarios validados en el servidor, cuentas de usuario, XP e insignias.
 
 🌐 **Producción:** [cyberclass.calatam.com](https://cyberclass.calatam.com)
+
+## Arquitectura
+
+```
+Navegador ── SPA React (nginx, /var/www/cyberclass)
+                │  /api/*
+                ▼
+             Fastify API (systemd, 127.0.0.1:3001)
+                │
+                ▼
+             SQLite (/var/lib/cyberclass/app.db)
+```
+
+- **Frontend** (`web/`): React 19 + Vite + TypeScript + Tailwind CSS 4 + React Router
+- **Backend** (`api/`): Node 24 + Fastify 5 + JWT (`@fastify/jwt` v10) + `node:sqlite` (sin dependencias nativas)
+- **Seguridad**: las respuestas correctas **solo viven en el backend** — el catálogo público se sirve sin `correcta` ni `explicacion`; la calificación y el XP los decide el servidor. Passwords con `scrypt` + salt. JWT expira a 30 días.
 
 ## Contenido
 
 - **5 dominios**: Fundamentos, Defensa (Blue Team), Ofensiva (Red Team), Ingeniería Segura, Especialización
-- **12 rutas de aprendizaje** activas (14 en total, 2 próximamente)
-- **23 módulos** con **68 preguntas** de opción múltiple, cada una con explicación
-- Sistema de XP (se gana al aprobar con ≥70%), 6 insignias y seguimiento de progreso por ruta
+- **12 rutas activas** (13 en catálogo, 1 próximamente) · **23 módulos** · **68 preguntas** con explicación
+- XP al aprobar (≥70%, otorgado una sola vez por módulo), 6 insignias, progreso por ruta
 
-## Stack
+## API
 
-- React 19 + Vite + TypeScript
-- Tailwind CSS 4
-- React Router
-- Persistencia en `localStorage` (sin servidor)
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | — | Crear cuenta → token JWT |
+| POST | `/api/auth/login` | — | Iniciar sesión → token JWT |
+| GET | `/api/me` | ✓ | Usuario actual + XP |
+| GET | `/api/catalogo` | — | Catálogo completo (sin respuestas) |
+| POST | `/api/answer` | ✓ | Valida una respuesta → feedback + explicación |
+| POST | `/api/attempts` | ✓ | Califica el intento completo → score, XP |
+| GET | `/api/progreso` | ✓ | Progreso del usuario |
+| GET | `/api/health` | — | Healthcheck |
 
 ## Desarrollo
 
 ```sh
-cd web
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # genera web/dist/
+# Backend (terminal 1)
+cd api && npm install && npm run build
+JWT_SECRET=dev-secret node dist/index.js      # 127.0.0.1:3001
+
+# Frontend (terminal 2) — proxy /api → 3001 ya configurado en vite.config.ts
+cd web && npm install && npm run dev           # http://localhost:5173
 ```
 
 ## Estructura
 
 ```
+api/src/
+  index.ts        Servidor Fastify: auth, catálogo, evaluación, progreso
+  db.ts           SQLite (node:sqlite): users, progreso, attempts
+  catalogo.ts     Fuente de verdad del contenido (CON respuestas)
 web/src/
-  catalogo.ts     Todo el contenido: dominios, rutas, módulos y preguntas
-  store.ts        Progreso, XP e insignias (localStorage)
-  types.ts        Tipos TypeScript
-  components/     Navbar
-  pages/          Landing, Rutas, RutaDetalle, Modulo (quiz), Perfil
+  api.ts          Cliente HTTP + manejo de token
+  catalogo-context.tsx  Catálogo cargado desde /api/catalogo
+  store.ts        Progreso desde API + helpers puros (insignias, % ruta)
+  pages/          Landing, Rutas, RutaDetalle, Modulo, Perfil, Login, Registro
 ```
 
 ## Agregar contenido
 
-Todo el contenido vive en [`web/src/catalogo.ts`](web/src/catalogo.ts). Para agregar un módulo, añade un objeto `Modulo` con sus `preguntas` a la ruta correspondiente. Para una ruta nueva, agrega un objeto `Ruta` al array `RUTAS` con su `dominioId`.
+Todo el contenido vive en [`api/src/catalogo.ts`](api/src/catalogo.ts) (incluye respuestas correctas y explicaciones). Agrega módulos/rutas ahí, `npm run build` y redespliega — el frontend lo consume automáticamente.
 
 ## Deploy
 
-Build estático servido con nginx en la VM de GCP (mismo patrón que geo.calatam.com):
-
 ```sh
-cd web && npm run build
-# scp del dist/ al servidor + nginx reload
+./deploy/deploy.sh
 ```
+
+Hace todo: build de ambos, sube por túnel IAP (funciona aunque fail2ban banee tu IP), instala Node si falta, configura systemd + nginx + SSL, y verifica. El `JWT_SECRET` se genera una sola vez en el servidor (`/etc/cyberclass-api.env`, nunca en git).
 
 ---
 

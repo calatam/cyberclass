@@ -1,38 +1,20 @@
-import type { Progreso, ModuloCompletado, Ruta } from './types';
+import { api, getToken } from './api';
+import type { Progreso, Ruta, Usuario, ModuloCompletado } from './types';
 
-const KEY = 'cyberclass_progreso_v1';
+export const PROGRESO_VACIO: Progreso = { completados: {}, xp: 0 };
 
-export function getProgreso(): Progreso {
+/** Fetch user progress + XP from the API. Empty progress when logged out. */
+export async function fetchProgreso(): Promise<Progreso> {
+  if (!getToken()) return PROGRESO_VACIO;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as Progreso;
-  } catch { /* corrupted state falls through to fresh */ }
-  return { completados: {}, xp: 0 };
-}
-
-export function completarModulo(moduloId: string, score: number, total: number, xpModulo: number): Progreso {
-  const p = getProgreso();
-  const aprobado = score / total >= 0.7;
-  const previo = p.completados[moduloId];
-  const registro: ModuloCompletado = {
-    score,
-    total,
-    xp: aprobado ? xpModulo : 0,
-    fecha: new Date().toISOString(),
-  };
-  // XP awarded only once, on first pass
-  if (aprobado && (!previo || previo.xp === 0)) {
-    p.xp += xpModulo;
-  } else if (previo) {
-    registro.xp = previo.xp;
-    if (previo.score > score) {
-      registro.score = previo.score;
-      registro.total = previo.total;
-    }
+    const [me, prog] = await Promise.all([
+      api<Usuario>('/api/me'),
+      api<{ completados: Record<string, ModuloCompletado> }>('/api/progreso'),
+    ]);
+    return { completados: prog.completados, xp: me.xp };
+  } catch {
+    return PROGRESO_VACIO;
   }
-  p.completados[moduloId] = registro;
-  localStorage.setItem(KEY, JSON.stringify(p));
-  return p;
 }
 
 export function moduloAprobado(p: Progreso, moduloId: string): boolean {

@@ -1,17 +1,38 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { RUTAS } from '../catalogo';
-import { getProgreso, calcularInsignias, progresoRuta, moduloAprobado } from '../store';
+import { useCatalogo } from '../catalogo-context';
+import { getToken } from '../api';
+import { fetchProgreso, calcularInsignias, progresoRuta, moduloAprobado, PROGRESO_VACIO } from '../store';
 import type { Progreso } from '../types';
 
 export default function Perfil() {
-  const [progreso, setProgreso] = useState<Progreso>({ completados: {}, xp: 0 });
-  useEffect(() => setProgreso(getProgreso()), []);
+  const { rutas } = useCatalogo();
+  const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
+  useEffect(() => { fetchProgreso().then(setProgreso); }, []);
 
-  const insignias = calcularInsignias(progreso, RUTAS);
+  if (!getToken()) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 text-center">
+        <div className="text-5xl mb-4">🔐</div>
+        <h1 className="font-display text-2xl font-bold text-gray-100 mb-2">Inicia sesión para ver tu perfil</h1>
+        <p className="text-gray-400 mb-6">Tu progreso, XP e insignias se guardan en tu cuenta.</p>
+        <Link
+          to="/login"
+          className="inline-block px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] font-semibold transition-colors"
+        >
+          Entrar
+        </Link>
+      </div>
+    );
+  }
+
+  const insignias = calcularInsignias(progreso, rutas);
   const ganadas = insignias.filter((i) => i.ganada).length;
   const modulosAprobados = Object.keys(progreso.completados).filter((id) => moduloAprobado(progreso, id)).length;
-  const rutasEnProgreso = RUTAS.filter((r) => !r.proximamente).map((r) => ({ ruta: r, pr: progresoRuta(progreso, r) })).filter((x) => x.pr.hechos > 0);
+  const rutasEnProgreso = rutas
+    .filter((r) => !r.proximamente)
+    .map((r) => ({ ruta: r, pr: progresoRuta(progreso, r) }))
+    .filter((x) => x.pr.hechos > 0);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">

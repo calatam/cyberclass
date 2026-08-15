@@ -1,8 +1,7 @@
 export interface Pregunta {
   texto: string;
   opciones: string[];
-  correcta: number; // index into opciones
-  explicacion: string;
+  // correcta y explicacion viven SOLO en el backend — nunca llegan al navegador
 }
 
 export interface Modulo {
@@ -30,6 +29,13 @@ export interface Dominio {
   descripcion: string;
 }
 
+export interface Usuario {
+  id: number;
+  email: string;
+  nombre: string;
+  xp: number;
+}
+
 export interface ModuloCompletado {
   score: number;
   total: number;
@@ -40,4 +46,19 @@ export interface ModuloCompletado {
 export interface Progreso {
   completados: Record<string, ModuloCompletado>;
   xp: number;
+}
+
+export interface RespuestaFeedback {
+  esCorrecta: boolean;
+  correctaIdx: number;
+  explicacion: string;
+}
+
+export interface ResultadoIntento {
+  score: number;
+  total: number;
+  pct: number;
+  aprobado: boolean;
+  xpGanado: number;
+  xpTotal: number;
 }

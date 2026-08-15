@@ -1,14 +1,15 @@
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { buscarRuta } from '../catalogo';
-import { getProgreso, moduloAprobado, progresoRuta } from '../store';
+import { useCatalogo, buscarRuta } from '../catalogo-context';
+import { fetchProgreso, moduloAprobado, progresoRuta, PROGRESO_VACIO } from '../store';
 import type { Progreso } from '../types';
 
 export default function RutaDetalle() {
   const { id } = useParams();
-  const ruta = id ? buscarRuta(id) : null;
-  const [progreso, setProgreso] = useState<Progreso>({ completados: {}, xp: 0 });
-  useEffect(() => setProgreso(getProgreso()), []);
+  const { rutas } = useCatalogo();
+  const ruta = id ? buscarRuta(rutas, id) : null;
+  const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
+  useEffect(() => { fetchProgreso().then(setProgreso); }, []);
 
   if (!ruta) {
     return (

@@ -1,14 +1,26 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { getProgreso } from '../store';
+import { api, getToken, clearToken } from '../api';
+import type { Usuario } from '../types';
 
 export default function Navbar() {
   const loc = useLocation();
-  const [xp, setXp] = useState(0);
+  const navigate = useNavigate();
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
 
   useEffect(() => {
-    setXp(getProgreso().xp);
+    if (!getToken()) {
+      setUsuario(null);
+      return;
+    }
+    api<Usuario>('/api/me').then(setUsuario).catch(() => setUsuario(null));
   }, [loc]);
+
+  const salir = () => {
+    clearToken();
+    setUsuario(null);
+    navigate('/');
+  };
 
   const link = (to: string, label: string) => {
     const active = loc.pathname === to || (to !== '/' && loc.pathname.startsWith(to));
@@ -33,10 +45,28 @@ export default function Navbar() {
         </Link>
         <div className="flex items-center gap-1">
           {link('/rutas', 'Rutas')}
-          {link('/perfil', 'Mi Perfil')}
-          <div className="ml-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-semibold">
-            ⚡ {xp} XP
-          </div>
+          {usuario ? (
+            <>
+              {link('/perfil', 'Mi Perfil')}
+              <div className="ml-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-semibold">
+                ⚡ {usuario.xp} XP
+              </div>
+              <span className="hidden sm:block ml-2 text-sm text-gray-400">{usuario.nombre}</span>
+              <button
+                onClick={salir}
+                className="ml-2 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-100 border border-[#30363d] hover:border-gray-500 transition-colors"
+              >
+                Salir
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/login"
+              className="ml-2 px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] text-sm font-semibold transition-colors"
+            >
+              Entrar
+            </Link>
+          )}
         </div>
       </div>
     </nav>

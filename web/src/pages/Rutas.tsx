@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { RUTAS, DOMINIOS } from '../catalogo';
-import { getProgreso, progresoRuta } from '../store';
+import { useCatalogo } from '../catalogo-context';
+import { fetchProgreso, progresoRuta, PROGRESO_VACIO } from '../store';
 import type { Progreso } from '../types';
 
 const NIVEL_COLOR: Record<string, string> = {
@@ -11,24 +11,25 @@ const NIVEL_COLOR: Record<string, string> = {
 };
 
 export default function Rutas() {
-  const [progreso, setProgreso] = useState<Progreso>({ completados: {}, xp: 0 });
-  useEffect(() => setProgreso(getProgreso()), []);
+  const { dominios, rutas } = useCatalogo();
+  const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
+  useEffect(() => { fetchProgreso().then(setProgreso); }, []);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
       <h1 className="font-display text-4xl font-bold text-gray-100 mb-2">Rutas de Aprendizaje</h1>
       <p className="text-gray-400 mb-10">Elige una ruta y avanza módulo a módulo. Necesitas 70% para aprobar cada cuestionario.</p>
 
-      {DOMINIOS.map((d) => {
-        const rutas = RUTAS.filter((r) => r.dominioId === d.id);
-        if (rutas.length === 0) return null;
+      {dominios.map((d) => {
+        const rutasDom = rutas.filter((r) => r.dominioId === d.id);
+        if (rutasDom.length === 0) return null;
         return (
           <section key={d.id} className="mb-12">
             <h2 className="font-display text-xl font-bold text-gray-200 mb-4 flex items-center gap-2">
               <span className="text-2xl">{d.icono}</span> {d.nombre}
             </h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rutas.map((r) => {
+              {rutasDom.map((r) => {
                 const pr = progresoRuta(progreso, r);
                 const contenido = (
                   <>

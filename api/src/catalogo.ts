@@ -1,4 +1,4 @@
-import type { Dominio, Ruta } from './types';
+import type { Dominio, Ruta } from './types.js';
 
 export const DOMINIOS: Dominio[] = [
   { id: 'fundamentos', nombre: 'Fundamentos', icono: '🎓', descripcion: 'Punto de entrada. Conceptos base de ciberseguridad.' },
