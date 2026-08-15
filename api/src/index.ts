@@ -279,6 +279,7 @@ app.delete('/api/admin/rutas/:id', {
   const ruta = db.prepare('SELECT id FROM rutas WHERE id = ?').get(rutaId);
   if (!ruta) return reply.code(404).send({ error: 'Ruta no encontrada' });
   const modulos = db.prepare('SELECT id FROM modulos WHERE ruta_id = ?').all(rutaId) as unknown as { id: string }[];
+  revocarXpDeModulos(modulos.map((m) => m.id));
   for (const m of modulos) {
     db.prepare('DELETE FROM preguntas WHERE modulo_id = ?').run(m.id);
     db.prepare('DELETE FROM progreso WHERE modulo_id = ?').run(m.id);
@@ -289,6 +290,21 @@ app.delete('/api/admin/rutas/:id', {
   invalidarCache();
   return { ok: true, modulosEliminados: modulos.length };
 });
+
+/**
+ * Devuelve el XP otorgado por esos módulos antes de borrarlos. Sin esto el
+ * alumno queda con XP de contenido que ya no existe y el panel muestra
+ * "XP repartido" sin módulos aprobados que lo respalden.
+ */
+function revocarXpDeModulos(moduloIds: string[]) {
+  for (const mid of moduloIds) {
+    const filas = db.prepare('SELECT user_id, xp FROM progreso WHERE modulo_id = ? AND xp > 0')
+      .all(mid) as unknown as { user_id: number; xp: number }[];
+    for (const f of filas) {
+      db.prepare('UPDATE users SET xp = MAX(0, xp - ?) WHERE id = ?').run(f.xp, f.user_id);
+    }
+  }
+}
 
 const PREGUNTAS_SCHEMA = {
   type: 'array',
@@ -373,6 +389,7 @@ app.delete('/api/admin/modulos/:id', {
   const moduloId = req.params.id as string;
   const modulo = db.prepare('SELECT id FROM modulos WHERE id = ?').get(moduloId);
   if (!modulo) return reply.code(404).send({ error: 'Módulo no encontrado' });
+  revocarXpDeModulos([moduloId]);
   db.prepare('DELETE FROM preguntas WHERE modulo_id = ?').run(moduloId);
   db.prepare('DELETE FROM progreso WHERE modulo_id = ?').run(moduloId);
   db.prepare('DELETE FROM attempts WHERE modulo_id = ?').run(moduloId);
