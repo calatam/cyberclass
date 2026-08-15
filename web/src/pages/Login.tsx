@@ -45,7 +45,7 @@ export default function Login() {
           <input
             id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-gray-100 focus:border-emerald-500 focus:outline-none"
-            placeholder="tu@email.com"
+            placeholder={t('login.emailPh')}
           />
         </div>
         <div>
