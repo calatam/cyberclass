@@ -1,34 +1,39 @@
 import { db } from './db.js';
 import { DOMINIOS as SEED_DOMINIOS, RUTAS as SEED_RUTAS } from './catalogo.js';
+import { DOMINIOS_EN as SEED_DOMINIOS_EN, RUTAS_EN as SEED_RUTAS_EN } from './catalogo-en.js';
 import type { Dominio, Ruta, Modulo, Pregunta } from './types.js';
 
-// El catálogo se lee en cada request del frontend, así que lo cacheamos en
-// memoria y lo invalidamos en cada escritura del panel de administración.
-let cachePublico: { dominios: Dominio[]; rutas: Ruta[] } | null = null;
-let cacheAdmin: { dominios: Dominio[]; rutas: Ruta[] } | null = null;
+export const IDIOMAS = ['es', 'en'] as const;
+export type Idioma = (typeof IDIOMAS)[number];
+export const IDIOMA_DEFAULT: Idioma = 'es';
 
-export function invalidarCache() {
-  cachePublico = null;
-  cacheAdmin = null;
+export function normalizarIdioma(valor: unknown): Idioma {
+  return IDIOMAS.includes(valor as Idioma) ? (valor as Idioma) : IDIOMA_DEFAULT;
 }
 
-interface FilaRuta { id: string; dominio_id: string; nombre: string; descripcion: string; nivel: string; proximamente: number; orden: number }
+// El catálogo se lee en cada carga del frontend, así que lo cacheamos por
+// idioma y lo invalidamos completo en cada escritura del panel.
+const cachePublico = new Map<Idioma, { dominios: Dominio[]; rutas: Ruta[] }>();
+const cacheAdmin = new Map<Idioma, { dominios: Dominio[]; rutas: Ruta[] }>();
+
+export function invalidarCache() {
+  cachePublico.clear();
+  cacheAdmin.clear();
+}
+
+interface FilaRuta { id: string; dominio_id: string; nombre: string; descripcion: string; nivel: string; proximamente: number; orden: number; idioma: string }
 interface FilaModulo { id: string; ruta_id: string; titulo: string; descripcion: string; xp: number; orden: number }
 interface FilaPregunta { id: number; modulo_id: string; texto: string; opciones: string; correcta: number; explicacion: string; orden: number }
 
-/** Siembra el contenido inicial desde catalogo.ts la primera vez (idempotente). */
-export function seedCatalogo() {
-  const total = (db.prepare('SELECT COUNT(*) c FROM dominios').get() as { c: number }).c;
-  if (total > 0) return;
-
-  const insDominio = db.prepare('INSERT INTO dominios (id, nombre, icono, descripcion, orden) VALUES (?, ?, ?, ?, ?)');
-  const insRuta = db.prepare('INSERT INTO rutas (id, dominio_id, nombre, descripcion, nivel, proximamente, orden) VALUES (?, ?, ?, ?, ?, ?, ?)');
+function sembrarIdioma(idioma: Idioma, dominios: Dominio[], rutas: Ruta[]) {
+  const insDominio = db.prepare('INSERT INTO dominios (id, nombre, icono, descripcion, orden, idioma) VALUES (?, ?, ?, ?, ?, ?)');
+  const insRuta = db.prepare('INSERT INTO rutas (id, dominio_id, nombre, descripcion, nivel, proximamente, orden, idioma) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   const insModulo = db.prepare('INSERT INTO modulos (id, ruta_id, titulo, descripcion, xp, orden) VALUES (?, ?, ?, ?, ?, ?)');
   const insPregunta = db.prepare('INSERT INTO preguntas (modulo_id, texto, opciones, correcta, explicacion, orden) VALUES (?, ?, ?, ?, ?, ?)');
 
-  SEED_DOMINIOS.forEach((d, i) => insDominio.run(d.id, d.nombre, d.icono, d.descripcion, i));
-  SEED_RUTAS.forEach((r, ri) => {
-    insRuta.run(r.id, r.dominioId, r.nombre, r.descripcion, r.nivel, r.proximamente ? 1 : 0, ri);
+  dominios.forEach((d, i) => insDominio.run(d.id, d.nombre, d.icono, d.descripcion, i, idioma));
+  rutas.forEach((r, ri) => {
+    insRuta.run(r.id, r.dominioId, r.nombre, r.descripcion, r.nivel, r.proximamente ? 1 : 0, ri, idioma);
     r.modulos.forEach((m, mi) => {
       insModulo.run(m.id, r.id, m.titulo, m.descripcion, m.xp, mi);
       m.preguntas.forEach((p, pi) => {
@@ -36,14 +41,36 @@ export function seedCatalogo() {
       });
     });
   });
-  console.log(`[seed] catálogo sembrado: ${SEED_DOMINIOS.length} dominios, ${SEED_RUTAS.length} rutas`);
 }
 
-function construir(conRespuestas: boolean): { dominios: Dominio[]; rutas: Ruta[] } {
-  const dominios = db.prepare('SELECT id, nombre, icono, descripcion FROM dominios ORDER BY orden, nombre').all() as unknown as Dominio[];
-  const filasRutas = db.prepare('SELECT * FROM rutas ORDER BY orden, nombre').all() as unknown as FilaRuta[];
-  const filasModulos = db.prepare('SELECT * FROM modulos ORDER BY orden, titulo').all() as unknown as FilaModulo[];
-  const filasPreguntas = db.prepare('SELECT * FROM preguntas ORDER BY orden, id').all() as unknown as FilaPregunta[];
+/** Siembra el contenido de cada idioma la primera vez (idempotente por idioma). */
+export function seedCatalogo() {
+  const cuenta = (idioma: Idioma) =>
+    (db.prepare('SELECT COUNT(*) c FROM dominios WHERE idioma = ?').get(idioma) as { c: number }).c;
+
+  if (cuenta('es') === 0) {
+    sembrarIdioma('es', SEED_DOMINIOS, SEED_RUTAS);
+    console.log(`[seed] catálogo ES sembrado: ${SEED_DOMINIOS.length} dominios, ${SEED_RUTAS.length} rutas`);
+  }
+  if (cuenta('en') === 0) {
+    sembrarIdioma('en', SEED_DOMINIOS_EN, SEED_RUTAS_EN);
+    console.log(`[seed] catálogo EN sembrado: ${SEED_DOMINIOS_EN.length} dominios, ${SEED_RUTAS_EN.length} rutas`);
+  }
+  invalidarCache();
+}
+
+function construir(idioma: Idioma, conRespuestas: boolean): { dominios: Dominio[]; rutas: Ruta[] } {
+  const dominios = db.prepare('SELECT id, nombre, icono, descripcion FROM dominios WHERE idioma = ? ORDER BY orden, nombre')
+    .all(idioma) as unknown as Dominio[];
+  const filasRutas = db.prepare('SELECT * FROM rutas WHERE idioma = ? ORDER BY orden, nombre')
+    .all(idioma) as unknown as FilaRuta[];
+
+  const idsRutas = new Set(filasRutas.map((r) => r.id));
+  const filasModulos = (db.prepare('SELECT * FROM modulos ORDER BY orden, titulo').all() as unknown as FilaModulo[])
+    .filter((m) => idsRutas.has(m.ruta_id));
+  const idsModulos = new Set(filasModulos.map((m) => m.id));
+  const filasPreguntas = (db.prepare('SELECT * FROM preguntas ORDER BY orden, id').all() as unknown as FilaPregunta[])
+    .filter((p) => idsModulos.has(p.modulo_id));
 
   const preguntasPorModulo = new Map<string, Pregunta[]>();
   for (const p of filasPreguntas) {
@@ -85,23 +112,33 @@ function construir(conRespuestas: boolean): { dominios: Dominio[]; rutas: Ruta[]
 }
 
 /** Catálogo para alumnos: sin respuestas correctas ni explicaciones. */
-export function catalogoPublico() {
-  if (!cachePublico) cachePublico = construir(false);
-  return cachePublico;
+export function catalogoPublico(idioma: Idioma = IDIOMA_DEFAULT) {
+  let c = cachePublico.get(idioma);
+  if (!c) {
+    c = construir(idioma, false);
+    cachePublico.set(idioma, c);
+  }
+  return c;
 }
 
 /** Catálogo para el panel: incluye respuestas correctas y explicaciones. */
-export function catalogoAdmin() {
-  if (!cacheAdmin) cacheAdmin = construir(true);
-  return cacheAdmin;
+export function catalogoAdmin(idioma: Idioma = IDIOMA_DEFAULT) {
+  let c = cacheAdmin.get(idioma);
+  if (!c) {
+    c = construir(idioma, true);
+    cacheAdmin.set(idioma, c);
+  }
+  return c;
 }
 
-/** Busca un módulo con sus preguntas completas (para calificar). */
+/** Busca un módulo con sus preguntas completas (para calificar), en cualquier idioma. */
 export function buscarModulo(moduloId: string): { ruta: Ruta; modulo: Modulo } | null {
-  const { rutas } = catalogoAdmin();
-  for (const ruta of rutas) {
-    const modulo = ruta.modulos.find((m) => m.id === moduloId);
-    if (modulo) return { ruta, modulo };
+  for (const idioma of IDIOMAS) {
+    const { rutas } = catalogoAdmin(idioma);
+    for (const ruta of rutas) {
+      const modulo = ruta.modulos.find((m) => m.id === moduloId);
+      if (modulo) return { ruta, modulo };
+    }
   }
   return null;
 }

@@ -1,6 +1,8 @@
 # CyberClass 🛡️
 
-Plataforma full-stack de cursos interactivos de ciberseguridad de **CA LATAM**. Rutas de aprendizaje con cuestionarios validados en el servidor, cuentas de usuario, XP e insignias.
+Plataforma full-stack **bilingüe (ES/EN)** de cursos interactivos de ciberseguridad de **CA LATAM**. Rutas de aprendizaje con cuestionarios validados en el servidor, cuentas de usuario, XP e insignias.
+
+> Bilingual (Spanish/English) full-stack cybersecurity training platform: learning paths with server-validated quizzes, user accounts, XP and badges.
 
 🌐 **Producción:** [cyberclass.calatam.com](https://cyberclass.calatam.com)
 
@@ -22,9 +24,21 @@ Navegador ── SPA React (nginx, /var/www/cyberclass)
 
 ## Contenido
 
+Cada idioma tiene su propio catálogo completo e independiente:
+
 - **5 dominios**: Fundamentos, Defensa (Blue Team), Ofensiva (Red Team), Ingeniería Segura, Especialización
-- **12 rutas activas** (13 en catálogo, 1 próximamente) · **23 módulos** · **68 preguntas** con explicación
+- **12 rutas activas** (13 en catálogo, 1 próximamente) · **23 módulos** · **68 preguntas** con explicación — **en español y en inglés**
 - XP al aprobar (≥70%, otorgado una sola vez por módulo), 6 insignias, progreso por ruta
+
+## Idiomas / Languages
+
+La interfaz y el contenido están en **español e inglés**. El selector (ES/EN) vive en la barra superior; la preferencia se guarda en el navegador y arranca detectando el idioma del sistema.
+
+- **Interfaz**: diccionario en [`web/src/i18n.tsx`](web/src/i18n.tsx)
+- **Contenido**: cada idioma es un conjunto independiente de rutas/módulos/preguntas en la base de datos (columna `idioma`); los IDs en inglés llevan sufijo `-en`
+- **API**: `GET /api/catalogo?idioma=es|en` (y lo mismo para `/api/admin/catalogo`)
+- **Panel**: el admin elige qué idioma del curso está editando, independientemente del idioma de la interfaz
+- El progreso del alumno es por módulo, así que cursar la versión ES y la EN cuenta por separado
 
 ## API
 
@@ -33,7 +47,7 @@ Navegador ── SPA React (nginx, /var/www/cyberclass)
 | POST | `/api/auth/register` | — | Crear cuenta → token JWT |
 | POST | `/api/auth/login` | — | Iniciar sesión → token JWT |
 | GET | `/api/me` | ✓ | Usuario actual + XP |
-| GET | `/api/catalogo` | — | Catálogo completo (sin respuestas) |
+| GET | `/api/catalogo?idioma=es\|en` | — | Catálogo completo (sin respuestas) |
 | POST | `/api/answer` | ✓ | Valida una respuesta → feedback + explicación |
 | POST | `/api/attempts` | ✓ | Califica el intento completo → score, XP |
 | GET | `/api/progreso` | ✓ | Progreso del usuario |
@@ -56,8 +70,11 @@ cd web && npm install && npm run dev           # http://localhost:5173
 api/src/
   index.ts        Servidor Fastify: auth, catálogo, evaluación, progreso
   db.ts           SQLite (node:sqlite): users, progreso, attempts
-  catalogo.ts     Fuente de verdad del contenido (CON respuestas)
+  contenido.ts    Catálogo desde SQLite (público sin respuestas / admin con ellas)
+  catalogo.ts     Semilla del contenido en español (CON respuestas)
+  catalogo-en.ts  Semilla del contenido en inglés (CON respuestas)
 web/src/
+  i18n.tsx        Diccionario ES/EN + selector de idioma
   api.ts          Cliente HTTP + manejo de token
   catalogo-context.tsx  Catálogo cargado desde /api/catalogo
   store.ts        Progreso desde API + helpers puros (insignias, % ruta)
@@ -68,16 +85,23 @@ web/src/
 
 En ejecución el contenido (dominios → rutas → módulos → preguntas) vive en **SQLite** y se edita desde el navegador en `/admin` → pestaña **Contenido**. Los cambios son instantáneos: no hay que redesplegar.
 
-[`api/src/catalogo.ts`](api/src/catalogo.ts) es la **semilla versionada**: se carga automáticamente la primera vez que arranca contra una base vacía, y queda en Git como copia de respaldo y ejemplo de la estructura de datos.
+Las semillas versionadas viven en Git y se cargan automáticamente la primera vez que la app arranca contra una base vacía; quedan además como ejemplo de la estructura de datos:
+
+- [`api/src/catalogo.ts`](api/src/catalogo.ts) — contenido en español
+- [`api/src/catalogo-en.ts`](api/src/catalogo-en.ts) — contenido en inglés
 
 **Traer a Git lo editado en producción** (para que GitHub siga siendo la copia versionada del curso):
 
 ```bash
+# español
 ADMIN_EMAIL=admin@calatam.com ADMIN_PASSWORD='tu-clave' node scripts/export-catalogo.mjs
-git add api/src/catalogo.ts && git commit -m "content: actualiza catálogo desde el panel"
+# inglés
+IDIOMA=en ADMIN_EMAIL=admin@calatam.com ADMIN_PASSWORD='tu-clave' node scripts/export-catalogo.mjs
+
+git add api/src/catalogo*.ts && git commit -m "content: actualiza catálogo desde el panel"
 ```
 
-El script regenera `catalogo.ts` desde el contenido vivo. Apunta a producción por defecto; usa `CYBERCLASS_URL=http://localhost:3001` para exportar desde local.
+El script regenera el archivo de semilla del idioma indicado desde el contenido vivo. Apunta a producción por defecto; usa `CYBERCLASS_URL=http://localhost:3001` para exportar desde local.
 
 **Roles**: `alumno` cursa y acumula XP; `admin` gestiona contenido y cuentas, no acumula progreso y al abrir un módulo entra en modo previsualización.
 

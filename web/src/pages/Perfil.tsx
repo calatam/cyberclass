@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useCatalogo } from '../catalogo-context';
+import { useI18n } from '../i18n';
 import { api, getToken } from '../api';
 import { fetchProgreso, calcularInsignias, progresoRuta, moduloAprobado, PROGRESO_VACIO } from '../store';
 import type { Progreso, Usuario } from '../types';
 
 export default function Perfil() {
   const { rutas } = useCatalogo();
+  const { t } = useI18n();
   const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -38,13 +40,13 @@ export default function Perfil() {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
         <div className="text-5xl mb-4">🔐</div>
-        <h1 className="font-display text-2xl font-bold text-gray-100 mb-2">Inicia sesión para ver tu perfil</h1>
-        <p className="text-gray-400 mb-6">Tu progreso, XP e insignias se guardan en tu cuenta.</p>
+        <h1 className="font-display text-2xl font-bold text-gray-100 mb-2">{t('perfil.loginRequerido')}</h1>
+        <p className="text-gray-400 mb-6">{t('perfil.loginSub')}</p>
         <Link
           to="/login"
           className="inline-block px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] font-semibold transition-colors"
         >
-          Entrar
+          {t('login.entrar')}
         </Link>
       </div>
     );
@@ -57,9 +59,9 @@ export default function Perfil() {
     try {
       const u = await api<Usuario>('/api/me', { method: 'PATCH', body: { nombre } });
       setUsuario(u);
-      setMsgNombre({ ok: true, texto: 'Nombre actualizado ✓' });
+      setMsgNombre({ ok: true, texto: t('perfil.nombreOk') });
     } catch (err) {
-      setMsgNombre({ ok: false, texto: err instanceof Error ? err.message : 'Error al guardar' });
+      setMsgNombre({ ok: false, texto: err instanceof Error ? err.message : t('comun.error') });
     } finally {
       setGuardandoNombre(false);
     }
@@ -69,17 +71,17 @@ export default function Perfil() {
     e.preventDefault();
     setMsgPass(null);
     if (passNueva.length < 8) {
-      setMsgPass({ ok: false, texto: 'La contraseña nueva debe tener al menos 8 caracteres' });
+      setMsgPass({ ok: false, texto: t('registro.passCorta') });
       return;
     }
     setGuardandoPass(true);
     try {
       await api<{ ok: boolean }>('/api/auth/password', { method: 'POST', body: { actual: passActual, nueva: passNueva } });
-      setMsgPass({ ok: true, texto: 'Contraseña cambiada ✓' });
+      setMsgPass({ ok: true, texto: t('perfil.passOk') });
       setPassActual('');
       setPassNueva('');
     } catch (err) {
-      setMsgPass({ ok: false, texto: err instanceof Error ? err.message : 'Error al cambiar la contraseña' });
+      setMsgPass({ ok: false, texto: err instanceof Error ? err.message : t('comun.error') });
     } finally {
       setGuardandoPass(false);
     }
@@ -97,12 +99,12 @@ export default function Perfil() {
 
   const seccionConfiguracion = (
     <section>
-      <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">⚙️ Configuración</h2>
+      <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">{t('perfil.config')}</h2>
       <div className="grid md:grid-cols-2 gap-5">
         {/* Cambiar nombre */}
         <form onSubmit={guardarNombre} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5">
-          <h3 className="font-semibold text-gray-100 mb-3">Cambiar nombre</h3>
-          <label htmlFor="cfg-nombre" className="block text-sm text-gray-300 mb-1.5">Nombre</label>
+          <h3 className="font-semibold text-gray-100 mb-3">{t('perfil.cambiarNombre')}</h3>
+          <label htmlFor="cfg-nombre" className="block text-sm text-gray-300 mb-1.5">{t('registro.nombre')}</label>
           <input
             id="cfg-nombre" type="text" required minLength={2} value={nombre}
             onChange={(e) => setNombre(e.target.value)} className={inputCls}
@@ -114,19 +116,19 @@ export default function Perfil() {
             type="submit" disabled={guardandoNombre}
             className="mt-4 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] text-sm font-semibold transition-colors"
           >
-            {guardandoNombre ? 'Guardando…' : 'Guardar'}
+            {guardandoNombre ? t('comun.guardando') : t('comun.guardar')}
           </button>
         </form>
 
         {/* Cambiar contraseña */}
         <form onSubmit={cambiarPassword} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5">
-          <h3 className="font-semibold text-gray-100 mb-3">Cambiar contraseña</h3>
-          <label htmlFor="cfg-pass-actual" className="block text-sm text-gray-300 mb-1.5">Contraseña actual</label>
+          <h3 className="font-semibold text-gray-100 mb-3">{t('perfil.cambiarPass')}</h3>
+          <label htmlFor="cfg-pass-actual" className="block text-sm text-gray-300 mb-1.5">{t('perfil.passActual')}</label>
           <input
             id="cfg-pass-actual" type="password" required value={passActual}
             onChange={(e) => setPassActual(e.target.value)} className={inputCls}
           />
-          <label htmlFor="cfg-pass-nueva" className="block text-sm text-gray-300 mb-1.5 mt-3">Contraseña nueva (mín. 8)</label>
+          <label htmlFor="cfg-pass-nueva" className="block text-sm text-gray-300 mb-1.5 mt-3">{t('perfil.passNueva')}</label>
           <input
             id="cfg-pass-nueva" type="password" required minLength={8} value={passNueva}
             onChange={(e) => setPassNueva(e.target.value)} className={inputCls}
@@ -138,7 +140,7 @@ export default function Perfil() {
             type="submit" disabled={guardandoPass}
             className="mt-4 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] text-sm font-semibold transition-colors"
           >
-            {guardandoPass ? 'Cambiando…' : 'Cambiar contraseña'}
+            {guardandoPass ? t('perfil.cambiando') : t('perfil.cambiar')}
           </button>
         </form>
       </div>
@@ -148,7 +150,7 @@ export default function Perfil() {
   if (cargando) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-gray-500 animate-pulse">Cargando…</div>
+        <div className="text-gray-500 animate-pulse">{t('comun.cargando')}</div>
       </div>
     );
   }
@@ -157,15 +159,14 @@ export default function Perfil() {
   if (usuario?.rol === 'admin') {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
-        <h1 className="font-display text-4xl font-bold text-gray-100 mb-1">Mi Cuenta</h1>
+        <h1 className="font-display text-4xl font-bold text-gray-100 mb-1">{t('perfil.cuenta')}</h1>
         <p className="text-gray-400 mb-8 flex items-center gap-2">
           {usuario.nombre} · {usuario.email}
           <span className="text-xs px-2 py-0.5 rounded-md font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30">admin</span>
         </p>
         <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 mb-10 text-sm text-gray-400">
-          Esta es una cuenta de <span className="text-amber-400 font-medium">administración</span>: gestiona la plataforma desde el{' '}
-          <Link to="/admin" className="text-emerald-400 hover:underline">panel de administración</Link>. No acumula XP ni progreso de alumno;
-          puedes abrir los módulos para previsualizar el contenido sin que se registren intentos.
+          {t('perfil.adminAviso1')} <span className="text-amber-400 font-medium">{t('perfil.adminAviso2')}</span>{t('perfil.adminAviso3')}{' '}
+          <Link to="/admin" className="text-emerald-400 hover:underline">{t('perfil.adminAviso4')}</Link>{t('perfil.adminAviso5')}
         </div>
         {seccionConfiguracion}
       </div>
@@ -174,16 +175,16 @@ export default function Perfil() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
-      <h1 className="font-display text-4xl font-bold text-gray-100 mb-1">Mi Perfil</h1>
+      <h1 className="font-display text-4xl font-bold text-gray-100 mb-1">{t('perfil.titulo')}</h1>
       {usuario && <p className="text-gray-400 mb-8">{usuario.nombre} · {usuario.email}</p>}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
         {[
-          { n: `⚡ ${progreso.xp}`, l: 'XP total' },
-          { n: modulosAprobados, l: 'Módulos aprobados' },
-          { n: `${ganadas}/${insignias.length}`, l: 'Insignias' },
-          { n: rutasEnProgreso.length, l: 'Rutas iniciadas' },
+          { n: `⚡ ${progreso.xp}`, l: t('perfil.xpTotal') },
+          { n: modulosAprobados, l: t('perfil.modulosAprobados') },
+          { n: `${ganadas}/${insignias.length}`, l: t('perfil.insignias') },
+          { n: rutasEnProgreso.length, l: t('perfil.rutasIniciadas') },
         ].map((s) => (
           <div key={s.l} className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 text-center">
             <div className="font-display text-2xl font-bold text-emerald-400">{s.n}</div>
@@ -194,7 +195,7 @@ export default function Perfil() {
 
       {/* Insignias */}
       <section className="mb-10">
-        <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">Insignias</h2>
+        <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">{t('perfil.insignias')}</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {insignias.map((ins) => (
             <div
@@ -206,8 +207,8 @@ export default function Perfil() {
               }`}
             >
               <div className={`text-4xl mb-2 ${ins.ganada ? '' : 'grayscale'}`}>{ins.icono}</div>
-              <div className="font-semibold text-gray-100 text-sm">{ins.nombre}</div>
-              <div className="text-xs text-gray-400 mt-1">{ins.descripcion}</div>
+              <div className="font-semibold text-gray-100 text-sm">{t(`insignia.${ins.codigo}.n`)}</div>
+              <div className="text-xs text-gray-400 mt-1">{t(`insignia.${ins.codigo}.d`)}</div>
             </div>
           ))}
         </div>
@@ -215,11 +216,11 @@ export default function Perfil() {
 
       {/* Rutas en progreso */}
       <section className="mb-10">
-        <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">Rutas en progreso</h2>
+        <h2 className="font-display text-2xl font-bold text-gray-100 mb-4">{t('perfil.rutasEnProgreso')}</h2>
         {rutasEnProgreso.length === 0 ? (
           <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-8 text-center">
-            <p className="text-gray-400 mb-3">Aún no has empezado ninguna ruta.</p>
-            <Link to="/rutas" className="text-emerald-400 hover:underline font-medium">Explorar rutas →</Link>
+            <p className="text-gray-400 mb-3">{t('perfil.sinRutas')}</p>
+            <Link to="/rutas" className="text-emerald-400 hover:underline font-medium">{t('perfil.explorar')}</Link>
           </div>
         ) : (
           <div className="space-y-3">

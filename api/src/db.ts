@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS rutas (
   orden INTEGER NOT NULL DEFAULT 0
 );
 
+
 CREATE TABLE IF NOT EXISTS modulos (
   id TEXT PRIMARY KEY,
   ruta_id TEXT NOT NULL,
@@ -86,3 +87,11 @@ CREATE TABLE IF NOT EXISTS preguntas (
 CREATE INDEX IF NOT EXISTS idx_preguntas_modulo ON preguntas(modulo_id, orden);
 CREATE INDEX IF NOT EXISTS idx_modulos_ruta ON modulos(ruta_id, orden);
 `);
+
+// Migración: idioma del contenido (es | en). Los módulos y preguntas heredan
+// el idioma de su ruta, así que solo dominios y rutas lo llevan.
+for (const tabla of ['dominios', 'rutas']) {
+  try {
+    db.exec(`ALTER TABLE ${tabla} ADD COLUMN idioma TEXT NOT NULL DEFAULT 'es'`);
+  } catch { /* la columna ya existe */ }
+}

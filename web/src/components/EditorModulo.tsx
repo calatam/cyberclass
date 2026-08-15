@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { useI18n } from '../i18n';
 import type { ModuloAdmin, PreguntaAdmin } from '../types';
 
 const input = 'w-full px-3 py-2 rounded-lg bg-[#0d1117] border border-[#30363d] text-gray-100 focus:border-emerald-500 focus:outline-none';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar }: Props) {
+  const { t } = useI18n();
   const [titulo, setTitulo] = useState(modulo.titulo);
   const [descripcion, setDescripcion] = useState(modulo.descripcion);
   const [xp, setXp] = useState(modulo.xp);
@@ -55,7 +57,7 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
   };
 
   const quitarPregunta = (i: number) => {
-    if (!window.confirm('¿Eliminar esta pregunta?')) return;
+    if (!window.confirm(t('editor.confirmBorrarPregunta'))) return;
     setPreguntas((ps) => ps.filter((_, j) => j !== i));
   };
 
@@ -73,16 +75,16 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
     setMsg(null);
     // Validación local antes de enviar
     if (preguntas.length === 0) {
-      setMsg({ ok: false, texto: 'El módulo necesita al menos una pregunta' });
+      setMsg({ ok: false, texto: t('editor.sinPreguntas') });
       return;
     }
     for (const [i, p] of preguntas.entries()) {
       if (p.texto.trim().length < 3) {
-        setMsg({ ok: false, texto: `Pregunta ${i + 1}: el enunciado está vacío` });
+        setMsg({ ok: false, texto: t('editor.enunciadoVacio', { n: i + 1 }) });
         return;
       }
       if (p.opciones.some((o) => !o.trim())) {
-        setMsg({ ok: false, texto: `Pregunta ${i + 1}: hay opciones vacías` });
+        setMsg({ ok: false, texto: t('editor.opcionesVacias', { n: i + 1 }) });
         return;
       }
     }
@@ -92,10 +94,10 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
         method: 'PUT',
         body: { titulo, descripcion, xp, preguntas },
       });
-      setMsg({ ok: true, texto: 'Cambios guardados ✓ (ya están en vivo para los alumnos)' });
+      setMsg({ ok: true, texto: t('editor.guardado') });
       onGuardado();
     } catch (err) {
-      setMsg({ ok: false, texto: err instanceof Error ? err.message : 'Error al guardar' });
+      setMsg({ ok: false, texto: err instanceof Error ? err.message : t('comun.error') });
     } finally {
       setGuardando(false);
     }
@@ -105,8 +107,8 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
     <div>
       <div className="flex items-center justify-between gap-4 mb-6">
         <div className="min-w-0">
-          <button onClick={onCerrar} className="text-sm text-gray-400 hover:text-gray-200">← Volver al contenido</button>
-          <h2 className="font-display text-2xl font-bold text-gray-100 mt-1 truncate">Editar módulo</h2>
+          <button onClick={onCerrar} className="text-sm text-gray-400 hover:text-gray-200">{t('editor.volver')}</button>
+          <h2 className="font-display text-2xl font-bold text-gray-100 mt-1 truncate">{t('editor.titulo')}</h2>
           <p className="text-sm text-gray-500">{rutaNombre} · <code className="text-gray-600">{modulo.id}</code></p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -116,14 +118,14 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
             rel="noreferrer"
             className={`${btn} border-[#30363d] text-gray-300 hover:border-gray-500`}
           >
-            Previsualizar
+            {t('editor.previsualizar')}
           </a>
           <button
             onClick={guardar}
             disabled={guardando}
             className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] font-semibold text-sm transition-colors"
           >
-            {guardando ? 'Guardando…' : 'Guardar cambios'}
+            {guardando ? t('comun.guardando') : t('editor.guardarCambios')}
           </button>
         </div>
       </div>
@@ -139,19 +141,19 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
       {/* Datos del módulo */}
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 mb-6 grid md:grid-cols-[2fr_1fr] gap-4">
         <div>
-          <label className="block text-sm text-gray-300 mb-1.5">Título</label>
+          <label className="block text-sm text-gray-300 mb-1.5">{t('editor.tituloCampo')}</label>
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} className={input} />
-          <label className="block text-sm text-gray-300 mb-1.5 mt-3">Descripción</label>
+          <label className="block text-sm text-gray-300 mb-1.5 mt-3">{t('editor.descripcion')}</label>
           <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className={input} />
         </div>
         <div>
-          <label className="block text-sm text-gray-300 mb-1.5">XP al aprobar</label>
+          <label className="block text-sm text-gray-300 mb-1.5">{t('editor.xp')}</label>
           <input
             type="number" min={0} max={1000} value={xp}
             onChange={(e) => setXp(Number(e.target.value))} className={input}
           />
           <p className="text-xs text-gray-500 mt-2">
-            Se otorga una sola vez, al superar el 70% de respuestas correctas.
+            {t('editor.xpAyuda')}
           </p>
         </div>
       </div>
@@ -159,10 +161,10 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
       {/* Preguntas */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-display text-xl font-bold text-gray-100">
-          Preguntas <span className="text-gray-500 text-base font-normal">({preguntas.length})</span>
+          {t('editor.preguntas')} <span className="text-gray-500 text-base font-normal">({preguntas.length})</span>
         </h3>
         <button onClick={agregarPregunta} className={`${btn} border-emerald-500/40 text-emerald-400 hover:border-emerald-500`}>
-          + Agregar pregunta
+          {t('editor.agregarPregunta')}
         </button>
       </div>
 
@@ -176,22 +178,22 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
               <textarea
                 value={p.texto}
                 onChange={(e) => actualizarPregunta(i, { texto: e.target.value })}
-                placeholder="Enunciado de la pregunta"
+                placeholder={t('editor.enunciado')}
                 rows={2}
                 className={`${input} resize-y`}
               />
               <div className="flex flex-col gap-1 shrink-0">
-                <button onClick={() => moverPregunta(i, -1)} disabled={i === 0} title="Subir"
+                <button onClick={() => moverPregunta(i, -1)} disabled={i === 0} title={t('editor.subir')}
                   className="px-2 py-0.5 rounded text-xs text-gray-400 hover:text-gray-100 disabled:opacity-30">↑</button>
-                <button onClick={() => moverPregunta(i, 1)} disabled={i === preguntas.length - 1} title="Bajar"
+                <button onClick={() => moverPregunta(i, 1)} disabled={i === preguntas.length - 1} title={t('editor.bajar')}
                   className="px-2 py-0.5 rounded text-xs text-gray-400 hover:text-gray-100 disabled:opacity-30">↓</button>
-                <button onClick={() => quitarPregunta(i)} title="Eliminar"
+                <button onClick={() => quitarPregunta(i)} title={t('comun.eliminar')}
                   className="px-2 py-0.5 rounded text-xs text-gray-500 hover:text-rose-400">✕</button>
               </div>
             </div>
 
             <p className="text-xs text-gray-500 mb-2 ml-10">
-              Marca el círculo de la <span className="text-emerald-400">respuesta correcta</span>
+              {t('editor.marcaCorrecta')} <span className="text-emerald-400">{t('editor.respuestaCorrecta')}</span>
             </p>
             <div className="space-y-2 ml-10">
               {p.opciones.map((op, j) => (
@@ -202,19 +204,19 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
                     checked={p.correcta === j}
                     onChange={() => actualizarPregunta(i, { correcta: j })}
                     className="w-4 h-4 accent-emerald-500 shrink-0"
-                    title="Marcar como respuesta correcta"
+                    title={t('editor.respuestaCorrecta')}
                   />
                   <span className="text-sm text-gray-500 w-5 shrink-0">{String.fromCharCode(65 + j)}.</span>
                   <input
                     value={op}
                     onChange={(e) => actualizarOpcion(i, j, e.target.value)}
-                    placeholder={`Opción ${String.fromCharCode(65 + j)}`}
+                    placeholder={`${t('editor.opcion')} ${String.fromCharCode(65 + j)}`}
                     className={`${input} ${p.correcta === j ? 'border-emerald-500/60' : ''}`}
                   />
                   <button
                     onClick={() => quitarOpcion(i, j)}
                     disabled={p.opciones.length <= 2}
-                    title={p.opciones.length <= 2 ? 'Mínimo 2 opciones' : 'Quitar opción'}
+                    title={p.opciones.length <= 2 ? t('editor.minOpciones') : t('editor.quitarOpcion')}
                     className="px-2 text-gray-500 hover:text-rose-400 disabled:opacity-30 shrink-0"
                   >
                     ✕
@@ -223,13 +225,13 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
               ))}
               {p.opciones.length < 6 && (
                 <button onClick={() => agregarOpcion(i)} className="text-xs text-emerald-400 hover:underline ml-6">
-                  + Agregar opción
+                  {t('editor.agregarOpcion')}
                 </button>
               )}
             </div>
 
             <div className="ml-10 mt-3">
-              <label className="block text-xs text-gray-400 mb-1">Explicación (se muestra tras responder)</label>
+              <label className="block text-xs text-gray-400 mb-1">{t('editor.explicacion')}</label>
               <textarea
                 value={p.explicacion}
                 onChange={(e) => actualizarPregunta(i, { explicacion: e.target.value })}
@@ -248,7 +250,7 @@ export default function EditorModulo({ modulo, rutaNombre, onGuardado, onCerrar 
             disabled={guardando}
             className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0d1117] font-semibold transition-colors"
           >
-            {guardando ? 'Guardando…' : 'Guardar cambios'}
+            {guardando ? t('comun.guardando') : t('editor.guardarCambios')}
           </button>
         </div>
       )}

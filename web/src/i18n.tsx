@@ -1,0 +1,507 @@
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+
+export const IDIOMAS = ['es', 'en'] as const;
+export type Idioma = (typeof IDIOMAS)[number];
+
+const KEY = 'cyberclass_idioma';
+
+/** Idioma inicial: lo guardado, si no el del navegador, si no español. */
+function idiomaInicial(): Idioma {
+  const guardado = localStorage.getItem(KEY);
+  if (guardado === 'es' || guardado === 'en') return guardado;
+  return navigator.language?.toLowerCase().startsWith('en') ? 'en' : 'es';
+}
+
+type Dict = Record<string, string>;
+
+const ES: Dict = {
+  // navbar
+  'nav.rutas': 'Rutas',
+  'nav.perfil': 'Perfil',
+  'nav.panel': 'Panel',
+  'nav.cuenta': 'Cuenta',
+  'nav.salir': 'Salir',
+  'nav.entrar': 'Entrar',
+  'nav.admin': 'admin',
+
+  // comunes
+  'comun.cargando': 'Cargando…',
+  'comun.guardar': 'Guardar',
+  'comun.guardando': 'Guardando…',
+  'comun.cancelar': 'Cancelar',
+  'comun.eliminar': 'Eliminar',
+  'comun.volver': 'Volver',
+  'comun.modulos': 'módulos',
+  'comun.preguntas': 'preguntas',
+  'comun.pregunta': 'pregunta',
+  'comun.error': 'Ocurrió un error',
+  'nivel.Básico': 'Básico',
+  'nivel.Intermedio': 'Intermedio',
+  'nivel.Avanzado': 'Avanzado',
+
+  // landing
+  'landing.badge': '🛡️ Formación en Ciberseguridad · CA LATAM',
+  'landing.titulo1': 'Aprende ciberseguridad',
+  'landing.titulo2': 'a tu ritmo',
+  'landing.sub': 'Rutas de aprendizaje con cuestionarios interactivos: desde fundamentos hasta análisis de malware. Crea tu cuenta, gana XP e insignias, y avanza por los 5 dominios de la seguridad.',
+  'landing.cta1': 'Empezar a aprender →',
+  'landing.cta2': 'Crear cuenta gratis',
+  'landing.stat.rutas': 'Rutas de aprendizaje',
+  'landing.stat.modulos': 'Módulos',
+  'landing.stat.preguntas': 'Preguntas',
+  'landing.stat.dominios': 'Dominios',
+  'landing.dominios.titulo': 'Los 5 dominios de la ciberseguridad',
+  'landing.dominios.sub': 'Una progresión lógica desde lo básico hasta la especialización.',
+
+  // rutas
+  'rutas.titulo': 'Rutas de Aprendizaje',
+  'rutas.sub': 'Elige una ruta y avanza módulo a módulo. Necesitas 70% para aprobar cada cuestionario.',
+  'rutas.completados': '{hechos}/{total} completados',
+  'rutas.proximamente': 'Próximamente',
+  'rutas.noEncontrada': 'Ruta no encontrada.',
+  'rutas.volver': '← Volver a rutas',
+  'rutas.progreso': 'Progreso de la ruta',
+
+  // módulo / cuestionario
+  'modulo.noEncontrado': 'Módulo no encontrado.',
+  'modulo.preguntaDe': 'Pregunta {n} de {total}',
+  'modulo.confirmar': 'Confirmar respuesta',
+  'modulo.validando': 'Validando…',
+  'modulo.siguiente': 'Siguiente pregunta →',
+  'modulo.verResultado': 'Ver resultado',
+  'modulo.enviando': 'Enviando…',
+  'modulo.correcto': '✅ Correcto',
+  'modulo.incorrecto': '❌ Incorrecto',
+  'modulo.aprobado': '¡Módulo aprobado!',
+  'modulo.sigue': 'Sigue practicando',
+  'modulo.obtuviste': 'Obtuviste {score} de {total} ({pct}%).',
+  'modulo.ganaste': ' Ganaste ⚡ {xp} XP.',
+  'modulo.yaGanado': ' (Ya habías ganado el XP de este módulo.)',
+  'modulo.necesitas': ' Necesitas 70% para aprobar.',
+  'modulo.xpTotal': 'XP total: ⚡ {xp}',
+  'modulo.reintentar': 'Reintentar',
+  'modulo.volverRuta': 'Volver a la ruta',
+  'modulo.preview.titulo': 'Previsualización',
+  'modulo.preview.correctas': 'Respuestas correctas: {score} de {total} ({pct}%).',
+  'modulo.preview.aviso': 'Cuenta de administración: no se registró progreso ni XP.',
+  'modulo.preview.revisar': 'Revisar de nuevo',
+
+  // auth
+  'login.titulo': 'Iniciar sesión',
+  'login.sub': 'Tu progreso y XP se guardan en tu cuenta.',
+  'login.email': 'Email',
+  'login.password': 'Contraseña',
+  'login.entrar': 'Entrar',
+  'login.entrando': 'Entrando…',
+  'login.sinCuenta': '¿No tienes cuenta?',
+  'login.registrate': 'Regístrate gratis',
+  'registro.titulo': 'Crear cuenta',
+  'registro.sub': 'Gratis. Guarda tu progreso, gana XP e insignias.',
+  'registro.nombre': 'Nombre',
+  'registro.nombrePh': 'Tu nombre',
+  'registro.passwordLabel': 'Contraseña (mín. 8 caracteres)',
+  'registro.crear': 'Crear cuenta',
+  'registro.creando': 'Creando cuenta…',
+  'registro.yaTienes': '¿Ya tienes cuenta?',
+  'registro.iniciaSesion': 'Inicia sesión',
+  'registro.passCorta': 'La contraseña debe tener al menos 8 caracteres',
+
+  // perfil
+  'perfil.titulo': 'Mi Perfil',
+  'perfil.cuenta': 'Mi Cuenta',
+  'perfil.loginRequerido': 'Inicia sesión para ver tu perfil',
+  'perfil.loginSub': 'Tu progreso, XP e insignias se guardan en tu cuenta.',
+  'perfil.xpTotal': 'XP total',
+  'perfil.modulosAprobados': 'Módulos aprobados',
+  'perfil.insignias': 'Insignias',
+  'perfil.rutasIniciadas': 'Rutas iniciadas',
+  'perfil.rutasEnProgreso': 'Rutas en progreso',
+  'perfil.sinRutas': 'Aún no has empezado ninguna ruta.',
+  'perfil.explorar': 'Explorar rutas →',
+  'perfil.config': '⚙️ Configuración',
+  'perfil.cambiarNombre': 'Cambiar nombre',
+  'perfil.cambiarPass': 'Cambiar contraseña',
+  'perfil.passActual': 'Contraseña actual',
+  'perfil.passNueva': 'Contraseña nueva (mín. 8)',
+  'perfil.cambiar': 'Cambiar contraseña',
+  'perfil.cambiando': 'Cambiando…',
+  'perfil.nombreOk': 'Nombre actualizado ✓',
+  'perfil.passOk': 'Contraseña cambiada ✓',
+  'perfil.adminAviso1': 'Esta es una cuenta de',
+  'perfil.adminAviso2': 'administración',
+  'perfil.adminAviso3': ': gestiona la plataforma desde el',
+  'perfil.adminAviso4': 'panel de administración',
+  'perfil.adminAviso5': '. No acumula XP ni progreso de alumno; puedes abrir los módulos para previsualizar el contenido sin que se registren intentos.',
+
+  // insignias
+  'insignia.primer-paso.n': 'Primer Paso',
+  'insignia.primer-paso.d': 'Aprueba tu primer módulo',
+  'insignia.en-marcha.n': 'En Marcha',
+  'insignia.en-marcha.d': 'Aprueba 5 módulos',
+  'insignia.imparable.n': 'Imparable',
+  'insignia.imparable.d': 'Aprueba 10 módulos',
+  'insignia.perfeccionista.n': 'Perfeccionista',
+  'insignia.perfeccionista.d': 'Obtén un puntaje perfecto',
+  'insignia.ruta-completa.n': 'Ruta Completa',
+  'insignia.ruta-completa.d': 'Completa una ruta de aprendizaje',
+  'insignia.especialista.n': 'Especialista',
+  'insignia.especialista.d': 'Completa 3 rutas de aprendizaje',
+
+  // 404
+  '404.titulo': '404',
+  '404.sub': 'Esta página no existe o fue movida.',
+  '404.inicio': 'Ir al inicio',
+  '404.rutas': 'Ver rutas',
+
+  // admin
+  'admin.titulo': 'Panel de Administración',
+  'admin.sub': 'Gestiona el contenido de los cursos y las cuentas de la plataforma.',
+  'admin.denegado': 'Acceso restringido',
+  'admin.denegadoSub': 'Este panel requiere una cuenta con rol de administrador.',
+  'admin.errorCarga': 'No se pudo cargar el panel.',
+  'admin.tab.contenido': 'Contenido',
+  'admin.tab.usuarios': 'Usuarios',
+  'admin.idioma': 'Idioma del contenido',
+  'admin.stat.rutas': 'Rutas',
+  'admin.stat.modulos': 'Módulos',
+  'admin.stat.preguntas': 'Preguntas',
+  'admin.stat.dominios': 'Dominios',
+  'admin.stat.alumnos': 'Alumnos',
+  'admin.stat.intentos': 'Intentos totales',
+  'admin.stat.aprobados': 'Módulos aprobados',
+  'admin.stat.xp': 'XP repartido',
+  'admin.stat.intentos7': 'Intentos (7 días)',
+  'admin.rutasModulos': 'Rutas y módulos',
+  'admin.nuevaRuta': '+ Nueva ruta',
+  'admin.editarRuta': 'Editar ruta',
+  'admin.nuevoModulo': '+ Módulo',
+  'admin.sinModulos': 'Sin módulos. Usa “+ Módulo” para crear el primero.',
+  'admin.sinPreguntas': ' · sin preguntas',
+  'admin.editarPreguntas': 'Editar preguntas',
+  'admin.formRuta.nueva': 'Nueva ruta',
+  'admin.formRuta.editar': 'Editar ruta: {nombre}',
+  'admin.formRuta.nombre': 'Nombre',
+  'admin.formRuta.dominio': 'Dominio',
+  'admin.formRuta.descripcion': 'Descripción',
+  'admin.formRuta.nivel': 'Nivel',
+  'admin.formRuta.proximamente': 'Marcar como “próximamente” (no accesible para alumnos)',
+  'admin.formRuta.crear': 'Crear ruta',
+  'admin.tabla.nombre': 'Nombre',
+  'admin.tabla.email': 'Email',
+  'admin.tabla.rol': 'Rol',
+  'admin.tabla.xp': 'XP',
+  'admin.tabla.modulos': 'Módulos',
+  'admin.tabla.ultimo': 'Último intento',
+  'admin.tabla.acciones': 'Acciones',
+  'admin.tabla.tu': '(tú)',
+  'admin.resetClave': 'Reset clave',
+  'admin.noPropioRol': 'No puedes cambiar tu propio rol',
+  'admin.noPropiaCuenta': 'No puedes eliminar tu propia cuenta',
+  'admin.confirm.rol': '¿Cambiar el rol de {email} a {rol}?',
+  'admin.confirm.reset': '¿Generar una contraseña temporal para {email}?',
+  'admin.confirm.borrarUsuario': '¿Eliminar a {email}? Se borra su cuenta, progreso e intentos.',
+  'admin.confirm.borrarModulo': '¿Eliminar el módulo "{titulo}"? Se borran sus preguntas y el progreso de los alumnos en él.',
+  'admin.confirm.borrarRuta': '¿Eliminar la ruta "{nombre}" con sus {n} módulos? No se puede deshacer.',
+  'admin.prompt.modulo': 'Título del nuevo módulo en "{ruta}":',
+  'admin.ok.rol': '{email} ahora es {rol}',
+  'admin.ok.reset': 'Contraseña temporal de {email}: {pass} — cópiala ahora, no se volverá a mostrar.',
+  'admin.ok.borrado': '{email} eliminado',
+  'admin.ok.moduloCreado': 'Módulo "{titulo}" creado — ábrelo para agregarle preguntas',
+  'admin.ok.moduloBorrado': 'Módulo "{titulo}" eliminado',
+  'admin.ok.rutaBorrada': 'Ruta "{nombre}" eliminada',
+  'admin.ok.rutaCreada': 'Ruta "{nombre}" creada',
+  'admin.ok.rutaActualizada': 'Ruta "{nombre}" actualizada',
+
+  // editor de módulo
+  'editor.volver': '← Volver al contenido',
+  'editor.titulo': 'Editar módulo',
+  'editor.previsualizar': 'Previsualizar',
+  'editor.guardarCambios': 'Guardar cambios',
+  'editor.tituloCampo': 'Título',
+  'editor.descripcion': 'Descripción',
+  'editor.xp': 'XP al aprobar',
+  'editor.xpAyuda': 'Se otorga una sola vez, al superar el 70% de respuestas correctas.',
+  'editor.preguntas': 'Preguntas',
+  'editor.agregarPregunta': '+ Agregar pregunta',
+  'editor.enunciado': 'Enunciado de la pregunta',
+  'editor.marcaCorrecta': 'Marca el círculo de la',
+  'editor.respuestaCorrecta': 'respuesta correcta',
+  'editor.opcion': 'Opción',
+  'editor.agregarOpcion': '+ Agregar opción',
+  'editor.explicacion': 'Explicación (se muestra tras responder)',
+  'editor.guardado': 'Cambios guardados ✓ (ya están en vivo para los alumnos)',
+  'editor.sinPreguntas': 'El módulo necesita al menos una pregunta',
+  'editor.enunciadoVacio': 'Pregunta {n}: el enunciado está vacío',
+  'editor.opcionesVacias': 'Pregunta {n}: hay opciones vacías',
+  'editor.confirmBorrarPregunta': '¿Eliminar esta pregunta?',
+  'editor.minOpciones': 'Mínimo 2 opciones',
+  'editor.quitarOpcion': 'Quitar opción',
+  'editor.subir': 'Subir',
+  'editor.bajar': 'Bajar',
+};
+
+const EN: Dict = {
+  // navbar
+  'nav.rutas': 'Paths',
+  'nav.perfil': 'Profile',
+  'nav.panel': 'Panel',
+  'nav.cuenta': 'Account',
+  'nav.salir': 'Sign out',
+  'nav.entrar': 'Sign in',
+  'nav.admin': 'admin',
+
+  // common
+  'comun.cargando': 'Loading…',
+  'comun.guardar': 'Save',
+  'comun.guardando': 'Saving…',
+  'comun.cancelar': 'Cancel',
+  'comun.eliminar': 'Delete',
+  'comun.volver': 'Back',
+  'comun.modulos': 'modules',
+  'comun.preguntas': 'questions',
+  'comun.pregunta': 'question',
+  'comun.error': 'Something went wrong',
+  'nivel.Básico': 'Beginner',
+  'nivel.Intermedio': 'Intermediate',
+  'nivel.Avanzado': 'Advanced',
+
+  // landing
+  'landing.badge': '🛡️ Cybersecurity Training · CA LATAM',
+  'landing.titulo1': 'Learn cybersecurity',
+  'landing.titulo2': 'at your own pace',
+  'landing.sub': 'Learning paths with interactive quizzes: from fundamentals to malware analysis. Create your account, earn XP and badges, and progress through the 5 security domains.',
+  'landing.cta1': 'Start learning →',
+  'landing.cta2': 'Create free account',
+  'landing.stat.rutas': 'Learning paths',
+  'landing.stat.modulos': 'Modules',
+  'landing.stat.preguntas': 'Questions',
+  'landing.stat.dominios': 'Domains',
+  'landing.dominios.titulo': 'The 5 domains of cybersecurity',
+  'landing.dominios.sub': 'A logical progression from the basics to specialization.',
+
+  // paths
+  'rutas.titulo': 'Learning Paths',
+  'rutas.sub': 'Pick a path and advance module by module. You need 70% to pass each quiz.',
+  'rutas.completados': '{hechos}/{total} completed',
+  'rutas.proximamente': 'Coming soon',
+  'rutas.noEncontrada': 'Path not found.',
+  'rutas.volver': '← Back to paths',
+  'rutas.progreso': 'Path progress',
+
+  // module / quiz
+  'modulo.noEncontrado': 'Module not found.',
+  'modulo.preguntaDe': 'Question {n} of {total}',
+  'modulo.confirmar': 'Confirm answer',
+  'modulo.validando': 'Checking…',
+  'modulo.siguiente': 'Next question →',
+  'modulo.verResultado': 'See result',
+  'modulo.enviando': 'Submitting…',
+  'modulo.correcto': '✅ Correct',
+  'modulo.incorrecto': '❌ Incorrect',
+  'modulo.aprobado': 'Module passed!',
+  'modulo.sigue': 'Keep practicing',
+  'modulo.obtuviste': 'You scored {score} out of {total} ({pct}%).',
+  'modulo.ganaste': ' You earned ⚡ {xp} XP.',
+  'modulo.yaGanado': ' (You had already earned the XP for this module.)',
+  'modulo.necesitas': ' You need 70% to pass.',
+  'modulo.xpTotal': 'Total XP: ⚡ {xp}',
+  'modulo.reintentar': 'Try again',
+  'modulo.volverRuta': 'Back to the path',
+  'modulo.preview.titulo': 'Preview',
+  'modulo.preview.correctas': 'Correct answers: {score} out of {total} ({pct}%).',
+  'modulo.preview.aviso': 'Admin account: no progress or XP was recorded.',
+  'modulo.preview.revisar': 'Review again',
+
+  // auth
+  'login.titulo': 'Sign in',
+  'login.sub': 'Your progress and XP are saved to your account.',
+  'login.email': 'Email',
+  'login.password': 'Password',
+  'login.entrar': 'Sign in',
+  'login.entrando': 'Signing in…',
+  'login.sinCuenta': "Don't have an account?",
+  'login.registrate': 'Sign up free',
+  'registro.titulo': 'Create account',
+  'registro.sub': 'Free. Save your progress, earn XP and badges.',
+  'registro.nombre': 'Name',
+  'registro.nombrePh': 'Your name',
+  'registro.passwordLabel': 'Password (min. 8 characters)',
+  'registro.crear': 'Create account',
+  'registro.creando': 'Creating account…',
+  'registro.yaTienes': 'Already have an account?',
+  'registro.iniciaSesion': 'Sign in',
+  'registro.passCorta': 'Password must be at least 8 characters',
+
+  // profile
+  'perfil.titulo': 'My Profile',
+  'perfil.cuenta': 'My Account',
+  'perfil.loginRequerido': 'Sign in to see your profile',
+  'perfil.loginSub': 'Your progress, XP and badges are saved to your account.',
+  'perfil.xpTotal': 'Total XP',
+  'perfil.modulosAprobados': 'Modules passed',
+  'perfil.insignias': 'Badges',
+  'perfil.rutasIniciadas': 'Paths started',
+  'perfil.rutasEnProgreso': 'Paths in progress',
+  'perfil.sinRutas': "You haven't started any path yet.",
+  'perfil.explorar': 'Explore paths →',
+  'perfil.config': '⚙️ Settings',
+  'perfil.cambiarNombre': 'Change name',
+  'perfil.cambiarPass': 'Change password',
+  'perfil.passActual': 'Current password',
+  'perfil.passNueva': 'New password (min. 8)',
+  'perfil.cambiar': 'Change password',
+  'perfil.cambiando': 'Changing…',
+  'perfil.nombreOk': 'Name updated ✓',
+  'perfil.passOk': 'Password changed ✓',
+  'perfil.adminAviso1': 'This is an',
+  'perfil.adminAviso2': 'administration',
+  'perfil.adminAviso3': ' account: manage the platform from the',
+  'perfil.adminAviso4': 'admin panel',
+  'perfil.adminAviso5': '. It earns no XP or student progress; you can open modules to preview content without recording attempts.',
+
+  // badges
+  'insignia.primer-paso.n': 'First Step',
+  'insignia.primer-paso.d': 'Pass your first module',
+  'insignia.en-marcha.n': 'Rolling',
+  'insignia.en-marcha.d': 'Pass 5 modules',
+  'insignia.imparable.n': 'Unstoppable',
+  'insignia.imparable.d': 'Pass 10 modules',
+  'insignia.perfeccionista.n': 'Perfectionist',
+  'insignia.perfeccionista.d': 'Get a perfect score',
+  'insignia.ruta-completa.n': 'Path Complete',
+  'insignia.ruta-completa.d': 'Complete a learning path',
+  'insignia.especialista.n': 'Specialist',
+  'insignia.especialista.d': 'Complete 3 learning paths',
+
+  // 404
+  '404.titulo': '404',
+  '404.sub': 'This page does not exist or was moved.',
+  '404.inicio': 'Go home',
+  '404.rutas': 'See paths',
+
+  // admin
+  'admin.titulo': 'Admin Panel',
+  'admin.sub': 'Manage course content and platform accounts.',
+  'admin.denegado': 'Restricted access',
+  'admin.denegadoSub': 'This panel requires an account with the admin role.',
+  'admin.errorCarga': 'The panel could not be loaded.',
+  'admin.tab.contenido': 'Content',
+  'admin.tab.usuarios': 'Users',
+  'admin.idioma': 'Content language',
+  'admin.stat.rutas': 'Paths',
+  'admin.stat.modulos': 'Modules',
+  'admin.stat.preguntas': 'Questions',
+  'admin.stat.dominios': 'Domains',
+  'admin.stat.alumnos': 'Students',
+  'admin.stat.intentos': 'Total attempts',
+  'admin.stat.aprobados': 'Modules passed',
+  'admin.stat.xp': 'XP awarded',
+  'admin.stat.intentos7': 'Attempts (7 days)',
+  'admin.rutasModulos': 'Paths and modules',
+  'admin.nuevaRuta': '+ New path',
+  'admin.editarRuta': 'Edit path',
+  'admin.nuevoModulo': '+ Module',
+  'admin.sinModulos': 'No modules yet. Use “+ Module” to create the first one.',
+  'admin.sinPreguntas': ' · no questions',
+  'admin.editarPreguntas': 'Edit questions',
+  'admin.formRuta.nueva': 'New path',
+  'admin.formRuta.editar': 'Edit path: {nombre}',
+  'admin.formRuta.nombre': 'Name',
+  'admin.formRuta.dominio': 'Domain',
+  'admin.formRuta.descripcion': 'Description',
+  'admin.formRuta.nivel': 'Level',
+  'admin.formRuta.proximamente': 'Mark as “coming soon” (not available to students)',
+  'admin.formRuta.crear': 'Create path',
+  'admin.tabla.nombre': 'Name',
+  'admin.tabla.email': 'Email',
+  'admin.tabla.rol': 'Role',
+  'admin.tabla.xp': 'XP',
+  'admin.tabla.modulos': 'Modules',
+  'admin.tabla.ultimo': 'Last attempt',
+  'admin.tabla.acciones': 'Actions',
+  'admin.tabla.tu': '(you)',
+  'admin.resetClave': 'Reset password',
+  'admin.noPropioRol': 'You cannot change your own role',
+  'admin.noPropiaCuenta': 'You cannot delete your own account',
+  'admin.confirm.rol': 'Change the role of {email} to {rol}?',
+  'admin.confirm.reset': 'Generate a temporary password for {email}?',
+  'admin.confirm.borrarUsuario': 'Delete {email}? Their account, progress and attempts will be removed.',
+  'admin.confirm.borrarModulo': 'Delete the module "{titulo}"? Its questions and student progress on it will be removed.',
+  'admin.confirm.borrarRuta': 'Delete the path "{nombre}" with its {n} modules? This cannot be undone.',
+  'admin.prompt.modulo': 'Title of the new module in "{ruta}":',
+  'admin.ok.rol': '{email} is now {rol}',
+  'admin.ok.reset': 'Temporary password for {email}: {pass} — copy it now, it will not be shown again.',
+  'admin.ok.borrado': '{email} deleted',
+  'admin.ok.moduloCreado': 'Module "{titulo}" created — open it to add questions',
+  'admin.ok.moduloBorrado': 'Module "{titulo}" deleted',
+  'admin.ok.rutaBorrada': 'Path "{nombre}" deleted',
+  'admin.ok.rutaCreada': 'Path "{nombre}" created',
+  'admin.ok.rutaActualizada': 'Path "{nombre}" updated',
+
+  // module editor
+  'editor.volver': '← Back to content',
+  'editor.titulo': 'Edit module',
+  'editor.previsualizar': 'Preview',
+  'editor.guardarCambios': 'Save changes',
+  'editor.tituloCampo': 'Title',
+  'editor.descripcion': 'Description',
+  'editor.xp': 'XP on passing',
+  'editor.xpAyuda': 'Awarded once, when the learner scores above 70%.',
+  'editor.preguntas': 'Questions',
+  'editor.agregarPregunta': '+ Add question',
+  'editor.enunciado': 'Question text',
+  'editor.marcaCorrecta': 'Select the radio of the',
+  'editor.respuestaCorrecta': 'correct answer',
+  'editor.opcion': 'Option',
+  'editor.agregarOpcion': '+ Add option',
+  'editor.explicacion': 'Explanation (shown after answering)',
+  'editor.guardado': 'Changes saved ✓ (already live for students)',
+  'editor.sinPreguntas': 'The module needs at least one question',
+  'editor.enunciadoVacio': 'Question {n}: the text is empty',
+  'editor.opcionesVacias': 'Question {n}: there are empty options',
+  'editor.confirmBorrarPregunta': 'Delete this question?',
+  'editor.minOpciones': 'Minimum 2 options',
+  'editor.quitarOpcion': 'Remove option',
+  'editor.subir': 'Move up',
+  'editor.bajar': 'Move down',
+};
+
+const DICTS: Record<Idioma, Dict> = { es: ES, en: EN };
+
+interface Ctx {
+  idioma: Idioma;
+  setIdioma: (i: Idioma) => void;
+  t: (clave: string, params?: Record<string, string | number>) => string;
+}
+
+const I18nCtx = createContext<Ctx | null>(null);
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [idioma, setIdiomaState] = useState<Idioma>(idiomaInicial);
+
+  useEffect(() => {
+    localStorage.setItem(KEY, idioma);
+    document.documentElement.lang = idioma;
+  }, [idioma]);
+
+  const valor = useMemo<Ctx>(() => ({
+    idioma,
+    setIdioma: setIdiomaState,
+    t: (clave, params) => {
+      let s = DICTS[idioma][clave] ?? DICTS.es[clave] ?? clave;
+      if (params) {
+        for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, String(v));
+      }
+      return s;
+    },
+  }), [idioma]);
+
+  return <I18nCtx.Provider value={valor}>{children}</I18nCtx.Provider>;
+}
+
+export function useI18n(): Ctx {
+  const ctx = useContext(I18nCtx);
+  if (!ctx) throw new Error('useI18n debe usarse dentro de I18nProvider');
+  return ctx;
+}

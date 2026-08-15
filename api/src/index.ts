@@ -5,7 +5,8 @@ import { promisify } from 'node:util';
 import { db } from './db.js';
 import {
   seedCatalogo, catalogoPublico, catalogoAdmin, buscarModulo,
-  guardarPreguntas, invalidarCache, slugify, type PreguntaEntrada,
+  guardarPreguntas, invalidarCache, slugify, normalizarIdioma, IDIOMAS,
+  type PreguntaEntrada,
 } from './contenido.js';
 
 // El contenido vive en la BD para poder editarlo desde el panel; la primera
@@ -223,7 +224,8 @@ app.delete('/api/admin/users/:id', {
 
 // ---------- gestión de contenido (solo rol admin) ----------
 
-app.get('/api/admin/catalogo', { preHandler: [(app as any).adminOnly] }, async () => catalogoAdmin());
+app.get('/api/admin/catalogo', { preHandler: [(app as any).adminOnly] },
+  async (req: any) => catalogoAdmin(normalizarIdioma(req.query?.idioma)));
 
 const RUTA_BODY = {
   type: 'object',
@@ -233,6 +235,7 @@ const RUTA_BODY = {
     dominioId: { type: 'string', minLength: 1, maxLength: 60 },
     nivel: { type: 'string', enum: ['Básico', 'Intermedio', 'Avanzado'] },
     proximamente: { type: 'boolean' },
+    idioma: { type: 'string', enum: [...IDIOMAS] },
   },
 } as const;
 
@@ -241,12 +244,14 @@ app.post('/api/admin/rutas', {
   schema: { body: { ...RUTA_BODY, required: ['nombre', 'dominioId'] } },
 }, async (req: any, reply) => {
   const { nombre, descripcion = '', dominioId, nivel = 'Básico', proximamente = false } = req.body;
-  const dominio = db.prepare('SELECT id FROM dominios WHERE id = ?').get(dominioId);
-  if (!dominio) return reply.code(400).send({ error: 'Dominio no existe' });
+  const idioma = normalizarIdioma(req.body.idioma);
+  // El dominio debe existir Y pertenecer al mismo idioma que la ruta
+  const dominio = db.prepare('SELECT id FROM dominios WHERE id = ? AND idioma = ?').get(dominioId, idioma);
+  if (!dominio) return reply.code(400).send({ error: 'El dominio no existe en ese idioma' });
   const id = slugify(nombre);
-  const maxOrden = (db.prepare('SELECT COALESCE(MAX(orden), -1) o FROM rutas').get() as { o: number }).o;
-  db.prepare('INSERT INTO rutas (id, dominio_id, nombre, descripcion, nivel, proximamente, orden) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(id, dominioId, nombre.trim(), descripcion.trim(), nivel, proximamente ? 1 : 0, maxOrden + 1);
+  const maxOrden = (db.prepare('SELECT COALESCE(MAX(orden), -1) o FROM rutas WHERE idioma = ?').get(idioma) as { o: number }).o;
+  db.prepare('INSERT INTO rutas (id, dominio_id, nombre, descripcion, nivel, proximamente, orden, idioma) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, dominioId, nombre.trim(), descripcion.trim(), nivel, proximamente ? 1 : 0, maxOrden + 1, idioma);
   invalidarCache();
   return { ok: true, id };
 });
@@ -421,7 +426,7 @@ app.post('/api/auth/password', {
 
 // ---------- catálogo (público, SIN respuestas correctas ni explicaciones) ----------
 
-app.get('/api/catalogo', async () => catalogoPublico());
+app.get('/api/catalogo', async (req: any) => catalogoPublico(normalizarIdioma(req.query?.idioma)));
 
 // ---------- evaluación (el servidor valida; las respuestas nunca viajan al cliente) ----------
 

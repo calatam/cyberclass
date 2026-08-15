@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useCatalogo } from '../catalogo-context';
+import { useI18n } from '../i18n';
 
 export default function Landing() {
   const { dominios, rutas } = useCatalogo();
+  const { t } = useI18n();
   const modulos = rutas.flatMap((r) => r.modulos);
   const totalPreguntas = modulos.reduce((s, m) => s + m.preguntas.length, 0);
   const rutasActivas = rutas.filter((r) => !r.proximamente).length;
@@ -12,28 +14,25 @@ export default function Landing() {
       {/* Hero */}
       <section className="pt-20 pb-16 text-center">
         <div className="inline-block px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium mb-6">
-          🛡️ Formación en Ciberseguridad · CA LATAM
+          {t('landing.badge')}
         </div>
         <h1 className="font-display text-5xl md:text-6xl font-extrabold text-gray-100 leading-tight mb-6">
-          Aprende ciberseguridad<br />
-          <span className="text-emerald-400">a tu ritmo</span>
+          {t('landing.titulo1')}<br />
+          <span className="text-emerald-400">{t('landing.titulo2')}</span>
         </h1>
-        <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-8">
-          Rutas de aprendizaje con cuestionarios interactivos: desde fundamentos hasta
-          análisis de malware. Crea tu cuenta, gana XP e insignias, y avanza por los 5 dominios de la seguridad.
-        </p>
+        <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-8">{t('landing.sub')}</p>
         <div className="flex items-center justify-center gap-4">
           <Link
             to="/rutas"
             className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0d1117] font-semibold transition-colors"
           >
-            Empezar a aprender →
+            {t('landing.cta1')}
           </Link>
           <Link
             to="/registro"
             className="px-6 py-3 rounded-xl border border-[#30363d] hover:border-gray-500 text-gray-200 font-semibold transition-colors"
           >
-            Crear cuenta gratis
+            {t('landing.cta2')}
           </Link>
         </div>
       </section>
@@ -41,10 +40,10 @@ export default function Landing() {
       {/* Stats */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-20">
         {[
-          { n: rutasActivas, l: 'Rutas de aprendizaje' },
-          { n: modulos.length, l: 'Módulos' },
-          { n: totalPreguntas, l: 'Preguntas' },
-          { n: dominios.length, l: 'Dominios' },
+          { n: rutasActivas, l: t('landing.stat.rutas') },
+          { n: modulos.length, l: t('landing.stat.modulos') },
+          { n: totalPreguntas, l: t('landing.stat.preguntas') },
+          { n: dominios.length, l: t('landing.stat.dominios') },
         ].map((s) => (
           <div key={s.l} className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 text-center">
             <div className="font-display text-3xl font-bold text-emerald-400">{s.n}</div>
@@ -56,9 +55,9 @@ export default function Landing() {
       {/* Dominios */}
       <section className="pb-24">
         <h2 className="font-display text-3xl font-bold text-gray-100 text-center mb-3">
-          Los 5 dominios de la ciberseguridad
+          {t('landing.dominios.titulo')}
         </h2>
-        <p className="text-gray-400 text-center mb-10">Una progresión lógica desde lo básico hasta la especialización.</p>
+        <p className="text-gray-400 text-center mb-10">{t('landing.dominios.sub')}</p>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {dominios.map((d) => {
             const rutasDom = rutas.filter((r) => r.dominioId === d.id);

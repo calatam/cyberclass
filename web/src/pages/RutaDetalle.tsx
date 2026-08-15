@@ -1,12 +1,14 @@
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useCatalogo, buscarRuta } from '../catalogo-context';
+import { useI18n } from '../i18n';
 import { fetchProgreso, moduloAprobado, progresoRuta, PROGRESO_VACIO } from '../store';
 import type { Progreso } from '../types';
 
 export default function RutaDetalle() {
   const { id } = useParams();
   const { rutas } = useCatalogo();
+  const { t } = useI18n();
   const ruta = id ? buscarRuta(rutas, id) : null;
   const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
   useEffect(() => { fetchProgreso().then(setProgreso); }, []);
@@ -14,8 +16,8 @@ export default function RutaDetalle() {
   if (!ruta) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-20 text-center">
-        <p className="text-gray-400">Ruta no encontrada.</p>
-        <Link to="/rutas" className="text-emerald-400 hover:underline">← Volver a rutas</Link>
+        <p className="text-gray-400">{t('rutas.noEncontrada')}</p>
+        <Link to="/rutas" className="text-emerald-400 hover:underline">{t('rutas.volver')}</Link>
       </div>
     );
   }
@@ -24,13 +26,13 @@ export default function RutaDetalle() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
-      <Link to="/rutas" className="text-sm text-gray-400 hover:text-gray-200">← Rutas</Link>
+      <Link to="/rutas" className="text-sm text-gray-400 hover:text-gray-200">← {t('nav.rutas')}</Link>
       <h1 className="font-display text-4xl font-bold text-gray-100 mt-3 mb-2">{ruta.nombre}</h1>
       <p className="text-gray-400 mb-6">{ruta.descripcion}</p>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 mb-8">
         <div className="flex items-center justify-between text-sm mb-2">
-          <span className="text-gray-300 font-medium">Progreso de la ruta</span>
+          <span className="text-gray-300 font-medium">{t('rutas.progreso')}</span>
           <span className="text-emerald-400 font-semibold">{pr.pct}%</span>
         </div>
         <div className="h-2.5 rounded-full bg-[#0d1117] overflow-hidden">

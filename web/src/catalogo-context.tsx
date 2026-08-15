@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from './api';
+import { useI18n } from './i18n';
 import type { Dominio, Ruta, Modulo } from './types';
 
 export interface Catalogo {
@@ -11,22 +12,27 @@ export interface Catalogo {
 const CatalogoCtx = createContext<Catalogo | null>(null);
 
 export function CatalogoProvider({ children }: { children: ReactNode }) {
+  const { idioma, t } = useI18n();
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null);
   const [error, setError] = useState(false);
 
+  // El contenido se recarga al cambiar de idioma
   useEffect(() => {
-    api<Catalogo>('/api/catalogo')
-      .then(setCatalogo)
-      .catch(() => setError(true));
-  }, []);
+    let vigente = true;
+    setCatalogo(null);
+    setError(false);
+    api<Catalogo>(`/api/catalogo?idioma=${idioma}`)
+      .then((c) => { if (vigente) setCatalogo(c); })
+      .catch(() => { if (vigente) setError(true); });
+    return () => { vigente = false; };
+  }, [idioma]);
 
   if (error) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-4">
         <div className="text-center">
           <div className="text-4xl mb-3">⚠️</div>
-          <p className="text-gray-300 font-medium">No se pudo cargar el catálogo.</p>
-          <p className="text-gray-500 text-sm mt-1">Verifica tu conexión e intenta de nuevo.</p>
+          <p className="text-gray-300 font-medium">{t('comun.error')}</p>
         </div>
       </div>
     );
@@ -35,7 +41,7 @@ export function CatalogoProvider({ children }: { children: ReactNode }) {
   if (!catalogo) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-gray-500 animate-pulse">Cargando catálogo…</div>
+        <div className="text-gray-500 animate-pulse">{t('comun.cargando')}</div>
       </div>
     );
   }

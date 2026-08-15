@@ -28,11 +28,10 @@ export function progresoRuta(p: Progreso, ruta: Ruta): { hechos: number; total: 
   return { hechos, total, pct: total === 0 ? 0 : Math.round((hechos / total) * 100) };
 }
 
+/** El nombre y la descripción se traducen en la UI con `insignia.<codigo>.n|d`. */
 export interface Insignia {
   codigo: string;
-  nombre: string;
   icono: string;
-  descripcion: string;
   ganada: boolean;
 }
 
@@ -41,11 +40,11 @@ export function calcularInsignias(p: Progreso, rutas: Ruta[]): Insignia[] {
   const rutasCompletas = rutas.filter((r) => !r.proximamente && r.modulos.length > 0 && progresoRuta(p, r).pct === 100).length;
   const perfectos = Object.values(p.completados).filter((c) => c.score === c.total).length;
   return [
-    { codigo: 'primer-paso', nombre: 'Primer Paso', icono: '🚀', descripcion: 'Aprueba tu primer módulo', ganada: nAprobados >= 1 },
-    { codigo: 'en-marcha', nombre: 'En Marcha', icono: '🔥', descripcion: 'Aprueba 5 módulos', ganada: nAprobados >= 5 },
-    { codigo: 'imparable', nombre: 'Imparable', icono: '⚡', descripcion: 'Aprueba 10 módulos', ganada: nAprobados >= 10 },
-    { codigo: 'perfeccionista', nombre: 'Perfeccionista', icono: '💯', descripcion: 'Obtén un puntaje perfecto', ganada: perfectos >= 1 },
-    { codigo: 'ruta-completa', nombre: 'Ruta Completa', icono: '🏆', descripcion: 'Completa una ruta de aprendizaje', ganada: rutasCompletas >= 1 },
-    { codigo: 'especialista', nombre: 'Especialista', icono: '🎖️', descripcion: 'Completa 3 rutas de aprendizaje', ganada: rutasCompletas >= 3 },
+    { codigo: 'primer-paso', icono: '🚀', ganada: nAprobados >= 1 },
+    { codigo: 'en-marcha', icono: '🔥', ganada: nAprobados >= 5 },
+    { codigo: 'imparable', icono: '⚡', ganada: nAprobados >= 10 },
+    { codigo: 'perfeccionista', icono: '💯', ganada: perfectos >= 1 },
+    { codigo: 'ruta-completa', icono: '🏆', ganada: rutasCompletas >= 1 },
+    { codigo: 'especialista', icono: '🎖️', ganada: rutasCompletas >= 3 },
   ];
 }

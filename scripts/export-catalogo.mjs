@@ -6,11 +6,13 @@
  *
  * Uso:
  *   ADMIN_EMAIL=admin@calatam.com ADMIN_PASSWORD='...' node scripts/export-catalogo.mjs
+ *   IDIOMA=en ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/export-catalogo.mjs
  *
  * Variables:
  *   CYBERCLASS_URL   base de la API (default: https://cyberclass.calatam.com)
  *   ADMIN_EMAIL      email de una cuenta con rol admin
  *   ADMIN_PASSWORD   su contraseña
+ *   IDIOMA           es (default) | en — cada idioma tiene su propio archivo
  *
  * Después: git add api/src/catalogo.ts && git commit -m "content: ..."
  */
@@ -29,7 +31,9 @@ if (!EMAIL || !PASSWORD) {
   process.exit(1);
 }
 
-const salida = join(dirname(fileURLToPath(import.meta.url)), '..', 'api', 'src', 'catalogo.ts');
+const IDIOMA = process.env.IDIOMA === 'en' ? 'en' : 'es';
+const ARCHIVO = IDIOMA === 'en' ? 'catalogo-en.ts' : 'catalogo.ts';
+const salida = join(dirname(fileURLToPath(import.meta.url)), '..', 'api', 'src', ARCHIVO);
 
 /** Literal TS seguro para cualquier texto (comillas, acentos, saltos de línea). */
 const lit = (s) => JSON.stringify(s ?? '');
@@ -50,7 +54,7 @@ async function main() {
     process.exit(1);
   }
 
-  const res = await fetch(`${BASE}/api/admin/catalogo`, {
+  const res = await fetch(`${BASE}/api/admin/catalogo?idioma=${IDIOMA}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -62,27 +66,43 @@ async function main() {
   const nModulos = rutas.reduce((s, r) => s + r.modulos.length, 0);
   const nPreguntas = rutas.reduce((s, r) => s + r.modulos.reduce((t, m) => t + m.preguntas.length, 0), 0);
 
+  const EXP_DOM = IDIOMA === 'en' ? 'DOMINIOS_EN' : 'DOMINIOS';
+  const EXP_RUT = IDIOMA === 'en' ? 'RUTAS_EN' : 'RUTAS';
+
   const out = [];
-  out.push('// Contenido del curso — copia versionada del catálogo.');
+  if (IDIOMA === 'en') {
+    out.push('// Course content — English version (versioned copy of the catalog).');
+    out.push('//');
+    out.push('// At runtime content lives in SQLite and is edited from /admin; this file is');
+    out.push('// the SEED (loaded into an empty database) and doubles as an example of the');
+    out.push('// data structure.');
+    out.push('//');
+    out.push('// IDs carry an `-en` suffix so both languages can coexist in the same tables.');
+    out.push('//');
+    out.push('// To pull production edits back here and commit them:');
+    out.push('//   IDIOMA=en ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/export-catalogo.mjs');
+  } else {
+    out.push('// Contenido del curso — copia versionada del catálogo.');
+    out.push('//');
+    out.push('// En ejecución el contenido vive en SQLite y se edita desde /admin;');
+    out.push('// este archivo es la SEMILLA (se carga en una base vacía) y sirve como');
+    out.push('// ejemplo de la estructura de datos.');
+    out.push('//');
+    out.push('// Para traer aquí lo editado en producción y commitearlo:');
+    out.push('//   ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/export-catalogo.mjs');
+  }
   out.push('//');
-  out.push('// En ejecución el contenido vive en SQLite y se edita desde /admin;');
-  out.push('// este archivo es la SEMILLA (se carga en una base vacía) y sirve como');
-  out.push('// ejemplo de la estructura de datos.');
-  out.push('//');
-  out.push('// Para traer aquí lo editado en producción y commitearlo:');
-  out.push("//   ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/export-catalogo.mjs");
-  out.push('//');
-  out.push(`// Generado desde ${BASE} · ${dominios.length} dominios · ${rutas.length} rutas · ${nModulos} módulos · ${nPreguntas} preguntas`);
+  out.push(`// Generado desde ${BASE} (idioma: ${IDIOMA}) · ${dominios.length} dominios · ${rutas.length} rutas · ${nModulos} módulos · ${nPreguntas} preguntas`);
   out.push('');
   out.push("import type { Dominio, Ruta } from './types.js';");
   out.push('');
-  out.push('export const DOMINIOS: Dominio[] = [');
+  out.push(`export const ${EXP_DOM}: Dominio[] = [`);
   for (const d of dominios) {
     out.push(`  { id: ${lit(d.id)}, nombre: ${lit(d.nombre)}, icono: ${lit(d.icono)}, descripcion: ${lit(d.descripcion)} },`);
   }
   out.push('];');
   out.push('');
-  out.push('export const RUTAS: Ruta[] = [');
+  out.push(`export const ${EXP_RUT}: Ruta[] = [`);
   for (const r of rutas) {
     out.push('  {');
     out.push(`    id: ${lit(r.id)},`);
@@ -117,10 +137,10 @@ async function main() {
   out.push('');
 
   writeFileSync(salida, out.join('\n'), 'utf8');
-  console.log(`✅ Catálogo exportado a api/src/catalogo.ts`);
+  console.log(`✅ Catálogo (${IDIOMA}) exportado a api/src/${ARCHIVO}`);
   console.log(`   ${dominios.length} dominios · ${rutas.length} rutas · ${nModulos} módulos · ${nPreguntas} preguntas`);
   console.log('\n   Revísalo y commitéalo:');
-  console.log('   git add api/src/catalogo.ts && git commit -m "content: actualiza catálogo desde el panel"');
+  console.log(`   git add api/src/${ARCHIVO} && git commit -m "content: actualiza catálogo (${IDIOMA}) desde el panel"`);
 }
 
 main().catch((err) => {

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import { I18nProvider } from './i18n';
 import { CatalogoProvider } from './catalogo-context';
 import Landing from './pages/Landing';
 import Rutas from './pages/Rutas';
@@ -13,6 +14,7 @@ import Admin from './pages/Admin';
 
 export default function App() {
   return (
+    <I18nProvider>
     <BrowserRouter>
       <Navbar />
       <CatalogoProvider>
@@ -29,5 +31,6 @@ export default function App() {
         </Routes>
       </CatalogoProvider>
     </BrowserRouter>
+    </I18nProvider>
   );
 }

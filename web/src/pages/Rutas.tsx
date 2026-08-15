@@ -1,6 +1,7 @@
 import { Link, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useCatalogo } from '../catalogo-context';
+import { useI18n } from '../i18n';
 import { api, getToken } from '../api';
 import { fetchProgreso, progresoRuta, PROGRESO_VACIO } from '../store';
 import type { Progreso, Usuario } from '../types';
@@ -13,6 +14,7 @@ const NIVEL_COLOR: Record<string, string> = {
 
 export default function Rutas() {
   const { dominios, rutas } = useCatalogo();
+  const { t } = useI18n();
   const [progreso, setProgreso] = useState<Progreso>(PROGRESO_VACIO);
   const [esAdmin, setEsAdmin] = useState(false);
 
@@ -28,8 +30,8 @@ export default function Rutas() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
-      <h1 className="font-display text-4xl font-bold text-gray-100 mb-2">Rutas de Aprendizaje</h1>
-      <p className="text-gray-400 mb-10">Elige una ruta y avanza módulo a módulo. Necesitas 70% para aprobar cada cuestionario.</p>
+      <h1 className="font-display text-4xl font-bold text-gray-100 mb-2">{t('rutas.titulo')}</h1>
+      <p className="text-gray-400 mb-10">{t('rutas.sub')}</p>
 
       {dominios.map((d) => {
         const rutasDom = rutas.filter((r) => r.dominioId === d.id);
@@ -47,17 +49,17 @@ export default function Rutas() {
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="font-display text-lg font-bold text-gray-100">{r.nombre}</h3>
                       <span className={`text-xs px-2 py-0.5 rounded-md font-medium whitespace-nowrap ${NIVEL_COLOR[r.nivel]}`}>
-                        {r.nivel}
+                        {t(`nivel.${r.nivel}`)}
                       </span>
                     </div>
                     <p className="text-sm text-gray-400 mb-4">{r.descripcion}</p>
                     {r.proximamente ? (
-                      <span className="text-xs text-gray-500 italic">Próximamente</span>
+                      <span className="text-xs text-gray-500 italic">{t('rutas.proximamente')}</span>
                     ) : (
                       <>
                         <div className="flex items-center justify-between text-xs text-gray-400 mb-1.5">
-                          <span>{r.modulos.length} módulos</span>
-                          <span>{pr.hechos}/{pr.total} completados</span>
+                          <span>{r.modulos.length} {t('comun.modulos')}</span>
+                          <span>{t('rutas.completados', { hechos: pr.hechos, total: pr.total })}</span>
                         </div>
                         <div className="h-2 rounded-full bg-[#0d1117] overflow-hidden">
                           <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pr.pct}%` }} />
