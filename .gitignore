@@ -8,3 +8,4 @@ web/dist/
 api/node_modules/
 api/dist/
 api/data/
+.gstack/
