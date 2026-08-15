@@ -12,6 +12,9 @@ on:
   schedule:
     # Lunes 06:00 UTC: detecta CVEs publicados sobre código que no cambió
     - cron: '0 6 * * 1'
+  # Disparo manual: útil para comprobar el pipeline tras rotar el SNYK_TOKEN,
+  # sin tener que inventar un commit
+  workflow_dispatch:
 
 permissions:
   contents: read
