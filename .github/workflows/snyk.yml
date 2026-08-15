@@ -71,7 +71,10 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: monitor
-          args: --all-projects --project-name=cyberclass
+          # OJO: --project-name NO es compatible con --all-projects (SNYK-CLI-0004).
+          # Con varios manifiestos Snyk nombra cada proyecto solo (cyberclass-api, web);
+          # para agruparlos bajo el repo se usa --remote-repo-url.
+          args: --all-projects --remote-repo-url=https://github.com/calatam/cyberclass
 
   # ─────────────────────────────────────────────────────────────────────────
   # Plantilla Python — cyberclass no tiene dependencias Python, pero este es
