@@ -38,3 +38,8 @@ CREATE TABLE IF NOT EXISTS attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, fecha);
 `);
+
+// Migración: columna rol (alumno | admin). SQLite no soporta IF NOT EXISTS en columnas.
+try {
+  db.exec("ALTER TABLE users ADD COLUMN rol TEXT NOT NULL DEFAULT 'alumno'");
+} catch { /* la columna ya existe */ }

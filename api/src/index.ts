@@ -59,7 +59,7 @@ async function verifyPassword(pwd: string, stored: string): Promise<boolean> {
   return derived.length === expected.length && timingSafeEqual(derived, expected);
 }
 
-interface UserRow { id: number; email: string; nombre: string; xp: number; password_hash: string }
+interface UserRow { id: number; email: string; nombre: string; xp: number; rol: string; password_hash: string }
 
 function firmarToken(user: { id: number; email: string; nombre: string }): string {
   return app.jwt.sign({ sub: user.id, email: user.email, nombre: user.nombre }, { expiresIn: '30d' });
@@ -72,6 +72,18 @@ app.decorate('auth', async (request: any, reply: any) => {
   } catch {
     reply.code(401).send({ error: 'No autenticado' });
   }
+});
+
+// Admin guard: el rol se consulta en la BD en cada request (revocable al instante)
+app.decorate('adminOnly', async (request: any, reply: any) => {
+  try {
+    await request.jwtVerify();
+  } catch {
+    return reply.code(401).send({ error: 'No autenticado' });
+  }
+  const u = db.prepare('SELECT rol FROM users WHERE id = ?').get(request.user.sub) as { rol: string } | undefined;
+  if (!u) return reply.code(401).send({ error: 'Usuario no existe' });
+  if (u.rol !== 'admin') return reply.code(403).send({ error: 'Requiere rol de administrador' });
 });
 
 // ---------- auth ----------
@@ -115,14 +127,36 @@ app.post('/api/auth/login', {
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return reply.code(401).send({ error: 'Email o contraseña incorrectos' });
   }
-  return { token: firmarToken(user), usuario: { id: user.id, email: user.email, nombre: user.nombre, xp: user.xp } };
+  return { token: firmarToken(user), usuario: { id: user.id, email: user.email, nombre: user.nombre, xp: user.xp, rol: user.rol } };
 });
 
 app.get('/api/me', { preHandler: [(app as any).auth] }, async (req: any, reply) => {
-  const user = db.prepare('SELECT id, email, nombre, xp FROM users WHERE id = ?').get(req.user.sub) as UserRow | undefined;
+  const user = db.prepare('SELECT id, email, nombre, xp, rol FROM users WHERE id = ?').get(req.user.sub) as UserRow | undefined;
   // Token válido pero usuario eliminado: 401 para que el cliente limpie la sesión
   if (!user) return reply.code(401).send({ error: 'Usuario no existe' });
   return user;
+});
+
+// ---------- administración (solo rol admin) ----------
+
+app.get('/api/admin/stats', { preHandler: [(app as any).adminOnly] }, async () => {
+  const usuarios = (db.prepare('SELECT COUNT(*) c FROM users').get() as { c: number }).c;
+  const intentos = (db.prepare('SELECT COUNT(*) c FROM attempts').get() as { c: number }).c;
+  const modulosAprobados = (db.prepare('SELECT COUNT(*) c FROM progreso WHERE score * 1.0 / total >= 0.7').get() as { c: number }).c;
+  const xpTotal = (db.prepare('SELECT COALESCE(SUM(xp), 0) s FROM users').get() as { s: number }).s;
+  const ultimos7dias = (db.prepare("SELECT COUNT(*) c FROM attempts WHERE fecha >= datetime('now', '-7 days')").get() as { c: number }).c;
+  return { usuarios, intentos, modulosAprobados, xpTotal, intentosUltimos7Dias: ultimos7dias };
+});
+
+app.get('/api/admin/users', { preHandler: [(app as any).adminOnly] }, async () => {
+  const usuarios = db.prepare(`
+    SELECT u.id, u.email, u.nombre, u.rol, u.xp, u.created_at,
+      (SELECT COUNT(*) FROM progreso p WHERE p.user_id = u.id AND p.score * 1.0 / p.total >= 0.7) AS modulos_aprobados,
+      (SELECT MAX(a.fecha) FROM attempts a WHERE a.user_id = u.id) AS ultimo_intento
+    FROM users u
+    ORDER BY u.xp DESC, u.created_at ASC
+  `).all();
+  return { usuarios };
 });
 
 // ---------- configuración de cuenta ----------

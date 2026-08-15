@@ -34,6 +34,26 @@ export interface Usuario {
   email: string;
   nombre: string;
   xp: number;
+  rol?: string; // alumno | admin
+}
+
+export interface AdminStats {
+  usuarios: number;
+  intentos: number;
+  modulosAprobados: number;
+  xpTotal: number;
+  intentosUltimos7Dias: number;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  nombre: string;
+  rol: string;
+  xp: number;
+  created_at: string;
+  modulos_aprobados: number;
+  ultimo_intento: string | null;
 }
 
 export interface ModuloCompletado {

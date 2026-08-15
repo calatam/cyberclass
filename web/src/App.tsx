@@ -9,6 +9,7 @@ import Perfil from './pages/Perfil';
 import Login from './pages/Login';
 import Registro from './pages/Registro';
 import NotFound from './pages/NotFound';
+import Admin from './pages/Admin';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Registro />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </CatalogoProvider>
