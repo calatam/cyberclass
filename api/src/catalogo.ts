@@ -7,7 +7,7 @@
 // Para traer aquí lo editado en producción y commitearlo:
 //   ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/export-catalogo.mjs
 //
-// Generado desde https://cyberclass.calatam.com · 5 dominios · 13 rutas · 23 módulos · 68 preguntas
+// Generado desde https://cyberclass.calatam.com (idioma: es) · 5 dominios · 13 rutas · 23 módulos · 68 preguntas
 
 import type { Dominio, Ruta } from './types.js';
 
