@@ -743,3 +743,84 @@ Tres cosas que aplicaría trabajando con otros:
 
 La IA hizo esto más rápido. No lo hizo más cierto: eso vino de ejecutar, mirar
 dos fuentes, encontrar que no cuadraban, y no soltar hasta entender por qué.
+
+---
+
+## 13. El servidor MCP de Snyk: el mismo bucle, del otro lado
+
+Snyk publicó soporte para **Model Context Protocol (MCP)**, el protocolo que
+permite a un asistente de IA invocar herramientas externas. La tesis del anuncio
+es la contraparte exacta de la sección 12: si la IA acelera la escritura de
+código, la seguridad tiene que entrar en ese mismo bucle, no después.
+
+En vez de citarlo, lo probé.
+
+### 13.1 Lo que dice el anuncio y lo que encontré
+
+| | Anuncio | Verificado (CLI 1.1306.4) |
+|---|---|---|
+| Comando | `snyk mcp -t [stdio\|sse] --experimental` | `--experimental` ya no existe: ahora es `-p <lite\|full\|experimental>` |
+| Alcance | "código de primera parte y dependencias" | **14 herramientas**, cubriendo los cuatro productos |
+| Transporte | stdio y SSE | Confirmado; SSE es el predeterminado |
+
+El flag cambió entre la publicación y hoy. Es un detalle menor, pero es el tercer
+caso en este trabajo donde la documentación y la herramienta no coinciden — y de
+nuevo solo aparece ejecutando.
+
+Levantar el servidor y enumerar sus capacidades vía JSON-RPC devuelve:
+
+```
+Snyk MCP Server v1.1306.4 · protocolo 2024-11-05 · 14 herramientas
+```
+
+| Herramienta | Qué hace |
+|-------------|----------|
+| `snyk_sca_scan` · `snyk_code_scan` | SCA y SAST |
+| `snyk_container_scan` · `snyk_iac_scan` | Contenedores e infraestructura |
+| `snyk_secret_scan` | Secretos embebidos en el código |
+| `snyk_breakability_check` | **Evalúa si un upgrade rompe el proyecto** |
+| `snyk_aibom` | AI Bill of Materials: modelos, datasets y herramientas de IA |
+| `snyk_package_health_check` · `snyk_sbom_scan` | Salud de paquetes, análisis de SBOM |
+| `snyk_auth` · `snyk_trust` · `snyk_logout` · `snyk_version` · `snyk_send_feedback` | Operación |
+
+Dos merecen atención. **`snyk_aibom`** es una categoría nueva: inventario de los
+componentes de IA de un proyecto, el equivalente a un SBOM para la cadena de
+suministro de modelos. Y **`snyk_secret_scan`** habría detectado el problema que
+yo mismo cometí en la sección 12.3.
+
+### 13.2 Aplicado al problema real de este trabajo
+
+La sección 4 propone remediar subiendo cuatro paquetes. La pregunta que frena esa
+remediación en cualquier equipo no es *"¿arregla las vulnerabilidades?"* sino
+**"¿rompe algo?"**. Eso es justo lo que responde `snyk_breakability_check`:
+
+| Upgrade | Riesgo | Hallazgo |
+|---------|--------|----------|
+| `requests` 2.31.0 → 2.33.0 | **medium** | Deja de soportar Python 3.7; deprecación en subclases de `HTTPAdapter` |
+| `pandas` 2.2.0 → 3.0.1 | **high** | Copy-on-Write pasa a ser el comportamiento por defecto |
+
+El detalle de `pandas` cambia el plan de remediación:
+
+> *"La asignación encadenada deja de funcionar. `df['col'][mask] = value` ya no
+> modifica el DataFrame original; hay que refactorizar a `df.loc[mask, 'col'] =
+> value`."* Además el tipo `str` deja de inferirse como `object`, y el mínimo de
+> Python sube a 3.11.
+
+Es decir: **la remediación de seguridad exige refactorizar código de aplicación**.
+Eso convierte una tarea de "subir una línea del manifiesto" en un cambio que
+necesita pruebas y revisión. Sin esa información, el arreglo se aplica, algo se
+rompe en producción, y el equipo concluye que actualizar dependencias es
+peligroso — que es exactamente cómo nace la deuda de seguridad.
+
+### 13.3 Por qué esto cierra el argumento
+
+La sección 12 sostiene que la IA produce lo plausible y el humano lo convierte en
+verdadero. El servidor MCP es Snyk aplicando esa misma idea desde el otro
+extremo: en vez de esperar a que el desarrollador verifique lo que el asistente
+sugirió, pone el escáner **dentro** del bucle para que la verificación ocurra en
+el momento de la generación.
+
+Es la diferencia entre auditar después y validar durante. Y sigue el mismo patrón
+que el resto de este trabajo: mover el control al punto donde corregir es barato
+—del despliegue al pull request, y del pull request al momento en que se escribe
+la línea.
