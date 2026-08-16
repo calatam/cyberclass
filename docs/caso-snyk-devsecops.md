@@ -652,3 +652,94 @@ excepciones caducan, si el reporte se publica aunque el build falle.
 
 Un pipeline de seguridad que interrumpe sin explicar termina desactivado, con la
 diferencia de que ahora todos creen que el problema está resuelto.
+
+---
+
+## 12. El método: por qué el valor está en el bucle
+
+### 12.1 Cómo se construyó esto
+
+Este trabajo se hizo con asistencia de IA, y conviene decirlo antes de que se
+pregunte. La declaración importa menos que lo que sigue: **dónde estuvo el valor
+y dónde estuvo el riesgo.**
+
+Se usaron dos asistentes con roles distintos. Uno en la terminal, para construir
+el pipeline, ejecutar los escaneos y redactar. Otro en el navegador, para
+recorrer la interfaz de Snyk, con una instrucción explícita de no leer ni
+transcribir credenciales — su tarea era describir dónde estaban las cosas, no
+operarlas.
+
+### 12.2 Lo que la IA aceleró y lo que no resolvió
+
+Lo que aceleró es evidente: escribir el workflow, parsear la salida JSON de los
+escaneos, redactar la documentación. Trabajo que habría tomado días quedó en
+horas.
+
+Lo que **no** resolvió es más interesante, porque es donde estuvo el aprendizaje:
+
+- El fallo `spawn python ENOENT` no apareció leyendo documentación. Apareció
+  ejecutando y volviendo a ejecutar con `-d`.
+- La incompatibilidad `--project-name` + `--all-projects` tampoco. El YAML era
+  válido, ningún linter la habría detectado. Solo se cayó el pipeline.
+- La discrepancia entre el dashboard y la terminal la detecté yo, contrastando
+  dos pantallas. Ningún asistente la iba a levantar solo, porque requería mirar
+  dos fuentes que nadie le pidió comparar.
+
+El patrón: la IA es rápida produciendo lo **plausible**. Convertir lo plausible
+en **verdadero** sigue siendo trabajo humano, y en seguridad esa distinción no es
+académica.
+
+### 12.3 Tres errores del proceso, y qué enseñó cada uno
+
+**Una credencial expuesta.** Pegué un API token en el chat para preguntar si era
+el correcto. Nunca debió salir de la pantalla donde se generó. Lección operativa:
+una credencial va del lugar donde nace al lugar donde se usa, sin escalas — ni
+por un chat, ni por un ticket, ni por un mensaje "solo para verificar". La
+corrección fue rotarlo.
+
+**Una explicación plausible pero mal fundada.** El primer análisis de la
+discrepancia comparaba la suma de dos manifiestos contra el escaneo de uno solo,
+y aun así llegaba a una conclusión que sonaba correcta. Lo era a medias. Solo al
+acotar la comparación —un manifiesto contra un manifiesto— apareció el
+experimento controlado que la convirtió en evidencia. **Una explicación que
+encaja no es lo mismo que una explicación verificada.**
+
+**Una advertencia ignorada.** El CLI había impreso `Detected multiple supported
+manifests (2)` y pasó de largo. Esa línea contenía la respuesta al problema que
+me llevó tres iteraciones resolver. Las herramientas suelen avisar antes de que
+uno se dé cuenta de que hay algo que entender.
+
+### 12.4 Es el mismo bucle que la seguridad
+
+El paralelo no es decorativo. Un escáner produce hallazgos plausibles; el trabajo
+humano es determinar cuáles son reales y alcanzables. Un asistente produce
+respuestas plausibles; el trabajo humano es determinar cuáles se sostienen.
+
+En ambos casos el fallo tiene la misma forma: **aceptar la salida sin verificar
+la entrada.** Un equipo que trata los hallazgos del escáner como verdad
+automática genera ruido y fatiga; uno que trata la salida de la IA como verdad
+automática genera código y documentación que suenan bien y no resisten la primera
+pregunta.
+
+Por eso el hallazgo más valioso de este ejercicio —la discrepancia de la sección
+5.5— no salió de una herramienta. Salió de contrastar dos fuentes que decían
+cosas distintas y negarse a elegir una.
+
+### 12.5 Qué significa esto para un equipo
+
+Tres cosas que aplicaría trabajando con otros:
+
+1. **Exigir la evidencia, no la conclusión.** "El dashboard muestra
+   `requests@2.31.0` y el manifiesto dice `>=2.31.0`" es verificable. "Snyk usa
+   las versiones mínimas" es una afirmación. La primera se puede refutar; la
+   segunda solo se puede creer.
+2. **Ejecutar antes de documentar.** Los cuatro fallos de la sección 5 aparecieron
+   corriendo, no leyendo. Una guía escrita sin ejecutar transmite la
+   documentación oficial, no la experiencia.
+3. **Dejar los errores en el registro.** Este documento incluye un análisis
+   equivocado y su corrección porque el proceso de acotarlo enseña más que el
+   resultado. Un informe sin errores en un trabajo nuevo suele significar que no
+   se probó lo suficiente, o que se editaron las partes incómodas.
+
+La IA hizo esto más rápido. No lo hizo más cierto: eso vino de ejecutar, mirar
+dos fuentes, encontrar que no cuadraban, y no soltar hasta entender por qué.
