@@ -330,6 +330,37 @@ requests>=2.31.0     ← el entorno local tenía 2.32.5
 Mismo repositorio, mismo escáner, mismo día, dos ecosistemas. El que fija
 versiones da resultados reproducibles; el que no, no. La variable está aislada.
 
+**Confirmación directa.** Abrir el detalle del proyecto en el dashboard cierra el
+caso: no es una inferencia, es una observación. Snyk evalúa **la versión mínima
+que el rango permite**.
+
+```
+requirements.txt:   requests>=2.31.0
+Dashboard:          requests@2.31.0     ← exactamente el mínimo declarado
+Entorno local:      requests@2.32.5
+```
+
+Y el efecto se propaga en cascada por el árbol, porque cada padre viejo arrastra
+hijos viejos:
+
+| Paquete | Dashboard | Local | Tipo |
+|---------|-----------|-------|------|
+| `requests` | 2.31.0 | 2.32.5 | **directa** — el mínimo exacto del manifiesto |
+| `urllib3` | 2.0.7 | 2.6.3 | transitiva vía `requests` |
+| `idna` | 3.10 | 3.11 | transitiva vía `requests` |
+| `soupsieve` | 2.4.1 | 2.8.3 | transitiva vía `beautifulsoup4` |
+| `numpy` | 1.21.3 | 2.4.2 | transitiva vía `pandas` |
+
+El caso de `numpy` es el más ilustrativo: **no aparece en `requirements.txt`**.
+Entra arrastrado por `pandas`, y como el manifiesto permite `pandas>=2.2.0`, el
+dashboard lo resuelve a 2.2.0, que a su vez arrastra `numpy@1.21.3` — una versión
+de 2021 con 3 vulnerabilidades. El entorno local tiene `pandas@3.0.1` y por tanto
+`numpy@2.4.2`, sin hallazgos.
+
+Es decir: **el rango abierto de un paquete declarado determina la versión de otro
+que nunca declaraste**, y con ella su exposición. Dos saltos de distancia entre la
+decisión (`pandas>=2.2.0`) y la consecuencia (3 CVEs en numpy).
+
 **El problema de fondo:** un `requirements.txt` con rangos abiertos **no describe
 una aplicación, describe una familia de aplicaciones posibles**. El servidor que
 instaló hace seis meses, la laptop del desarrollador y el runner de CI tienen tres
