@@ -1,7 +1,7 @@
 # Caso: integración de Snyk en el pipeline de CI
 
-**Repositorio:** `calatam/cyberclass` · **Fecha:** 15 de agosto de 2026
-**Alcance:** Snyk Open Source (SCA) sobre GitHub Actions
+**Repositorios:** `calatam/cyberclass` (Node) · `calatam/geocompliance-pilot` (Python)
+**Fecha:** 15 de agosto de 2026 · **Alcance:** Snyk Open Source (SCA) sobre GitHub Actions
 
 ---
 
@@ -15,9 +15,18 @@ El resultado son 120 dependencias bajo análisis automático, un pipeline que
 bloquea el merge ante vulnerabilidades altas o críticas, y los hallazgos
 publicados en la pestaña Security de GitHub.
 
-Durante la implementación aparecieron cuatro fallos que no están en la
-documentación básica y que solo se descubren ejecutando. Están documentados en la
-sección 5, porque son la parte más útil del ejercicio.
+Al extender el análisis a un segundo repositorio, esta vez en Python, aparecieron
+**8 vulnerabilidades reales** (5 altas, 6 rutas medias), de las cuales **5 de 8
+llegan por dependencias transitivas** que nunca fueron declaradas.
+
+El hallazgo de mayor valor no fue una vulnerabilidad sino una inconsistencia: el
+dashboard reportaba **27** vulnerabilidades para ese repositorio y el escaneo
+local **8**. Rastrear esa diferencia llevó a la causa raíz — el uso de rangos
+abiertos (`>=`) en `requirements.txt`, que hace que el mismo archivo describa
+aplicaciones distintas según dónde se instale. Está documentado en la sección 5.5.
+
+Durante la implementación aparecieron además cuatro fallos que no están en la
+documentación básica y que solo se descubren ejecutando (sección 5).
 
 ---
 
@@ -83,10 +92,55 @@ Un resultado limpio no significa que la herramienta sobre: significa que el
 estado base es bueno y que a partir de ahora cualquier regresión se detecta el
 día que entra.
 
+### Escaneo de un repositorio Python en producción
+
+El mismo pipeline se aplicó a `calatam/geocompliance-pilot`, un proyecto Python
+con `requirements.txt`. A diferencia del anterior, aquí sí hubo hallazgos:
+
+```
+Tested 30 dependencies for known issues, found 8 issues, 11 vulnerable paths.
+```
+
+| Severidad | Paquete | Tipo | Arreglo | Vulnerabilidad |
+|-----------|---------|------|---------|----------------|
+| High | `pymupdf` | **directa** | → 1.28.0 | Integer Overflow or Wraparound |
+| High | `urllib3` | transitiva | → 2.7.0 | Insertion of Sensitive Information Into Sent Data |
+| High | `urllib3` | transitiva | → 2.7.0 | Decompression Bomb |
+| High | `soupsieve` | transitiva | → 2.8.4 | ReDoS |
+| High | `soupsieve` | transitiva | → 2.8.4 | Allocation of Resources Without Limits |
+| Medium | `idna` | transitiva | → 3.15 | ReDoS |
+| Medium | `requests` | **directa** | → 2.33.0 | Insecure Temporary File |
+| Medium | `python-dotenv` | **directa** | → 1.2.2 | Symlink Attack |
+
+**Cinco de ocho llegan por dependencias transitivas.** La peor ilustra el punto:
+
+```
+requests@2.32.5 > urllib3@2.6.3    ← filtra información sensible
+```
+
+`urllib3` no aparece en `requirements.txt`. Entra arrastrado por `requests`, así
+que no se corrige tocando el manifiesto: hay que subir el paquete padre.
+
+### Priorización por paquete padre, no por hallazgo
+
+Las ocho vulnerabilidades se resuelven subiendo **cuatro** paquetes de primer
+nivel:
+
+```
+PyMuPDF>=1.28.0          # 1 High directo
+requests>=2.33.0         # su Medium + urllib3 (2 High) + idna (1 Medium)
+beautifulsoup4>=4.14.3   # arrastra soupsieve>=2.8.4 (2 High)
+python-dotenv>=1.2.2     # 1 Medium directo
+```
+
+Subir `requests` resuelve **cuatro** vulnerabilidades de una sola vez: la propia y
+las tres que arrastra. Priorizar por paquete padre en lugar de por hallazgo
+individual reduce el trabajo a la cuarta parte.
+
 ### Laboratorio de validación
 
-Como el repositorio estaba limpio, monté un laboratorio con versiones antiguas
-para verificar que el escáner realmente detecta:
+Antes de tener acceso al repositorio Python, y con el proyecto Node limpio, monté
+un laboratorio con versiones antiguas para verificar que el escáner detecta:
 
 ```
 Tested 11 dependencies for known issues, found 41 issues, 59 vulnerable paths.
@@ -205,6 +259,46 @@ desactivarse cuando alguien cambia de equipo. Distinguir "no tengo permisos" de
 "no está en mi plan" cambia por completo la conversación con el equipo de
 plataforma.
 
+### 5.5 El mismo repositorio, dos recuentos distintos
+
+Este no es un fallo de configuración sino un hallazgo sobre el código, y es el
+más valioso del ejercicio.
+
+**Síntoma:** el dashboard de Snyk reportaba **27 vulnerabilidades** para
+`geocompliance-pilot` (1 crítica, 12 altas, 10 medias, 4 bajas). El escaneo local
+del mismo repositorio, el mismo día, devolvió **8**.
+
+**Diagnóstico:** los dos análisis no estaban mirando el mismo software. La causa
+está en el manifiesto:
+
+```
+PyMuPDF>=1.24.0      ← el entorno local tenía 1.27.1
+requests>=2.31.0     ← el entorno local tenía 2.32.5
+```
+
+La integración de GitHub lee `requirements.txt` del repositorio sin un entorno
+instalado y evalúa contra las versiones que el archivo garantiza — las mínimas.
+El escaneo local analiza lo que está realmente instalado, que era más nuevo y por
+tanto tenía menos CVEs.
+
+**El problema de fondo:** un `requirements.txt` con rangos abiertos **no describe
+una aplicación, describe una familia de aplicaciones posibles**. El servidor que
+instaló hace seis meses, la laptop del desarrollador y el runner de CI tienen tres
+conjuntos de versiones distintos, y ninguno coincide necesariamente con lo que
+audita el escáner. Un informe de seguridad sobre un manifiesto sin fijar es un
+informe sobre una aplicación hipotética.
+
+**Solución:** fijar versiones. `pip freeze > requirements.txt` para el caso
+simple, o `pip-tools` / `poetry.lock` cuando se quiere separar lo que se declara
+(rangos legibles) de lo que se instala (versiones exactas), que es la práctica
+recomendada.
+
+**Lección:** dos herramientas que dan números distintos sobre lo mismo no
+significan que una esté rota. Significan que están midiendo cosas distintas, y
+entender por qué suele revelar un problema más profundo que cualquiera de los dos
+resultados. Aquí, el hallazgo real no fueron 27 ni 8 vulnerabilidades, sino que
+el proyecto no tenía forma de saber qué versiones corría en producción.
+
 ---
 
 ## 6. Decisiones de diseño
@@ -278,6 +372,10 @@ errores en una integración nueva suele significar que no se probó lo suficient
    En producción corporativa debería migrarse.
 2. **Solo cubre SCA** — quedan fuera Snyk Code (SAST), Container e IaC. Para este
    repositorio, Container aplicaría si se contenedoriza el backend.
+5. **Las 8 vulnerabilidades de `geocompliance-pilot` siguen abiertas** — el
+   escaneo las identificó y la remediación está propuesta (sección 4), pero
+   aplicarla requiere fijar versiones y revalidar que el proyecto siga
+   funcionando. Detectar no es remediar.
 3. **El umbral `high` deja pasar medias** — decisión consciente para no generar
    fatiga de alertas; se revisan en la pestaña Security pero no bloquean.
 4. **Sin arreglo automático** — no se habilitaron los PRs automáticos de Snyk.
@@ -289,18 +387,26 @@ errores en una integración nueva suele significar que no se probó lo suficient
 
 ### Versión de 2 minutos
 
-> Integré Snyk en el pipeline de CI de un repositorio para detectar
-> vulnerabilidades en dependencias. Lo monté en tres capas: escaneo local durante
-> el desarrollo, un gate en los pull requests que bloquea el merge si entra algo
-> alto o crítico, y monitoreo continuo en main que avisa cuando se publica un CVE
-> nuevo sobre una dependencia que ya tenías.
+> Integré Snyk en el pipeline de CI de dos repositorios, uno en Node y otro en
+> Python. Lo monté en tres capas: escaneo local durante el desarrollo, un gate en
+> los pull requests que bloquea el merge si entra algo alto o crítico, y
+> monitoreo continuo en main que avisa cuando se publica un CVE nuevo sobre una
+> dependencia que ya tenías.
 >
-> Lo interesante fue lo que apareció al ejecutarlo. En un laboratorio de prueba,
-> cuatro paquetes declarados instalaron once dependencias y dieron 41
-> vulnerabilidades. Una de las peores estaba en `urllib3`, que nunca fue
-> declarado: entró como transitiva de `requests`, así que no se arregla tocando
-> el manifiesto, hay que subir el paquete padre. Eso es exactamente lo que una
-> revisión a ojo no ve.
+> En el repositorio Python encontré 8 vulnerabilidades, cinco de ellas por
+> dependencias transitivas que nunca fueron declaradas. La peor estaba en
+> `urllib3`, que entra arrastrado por `requests`: no se arregla tocando el
+> manifiesto, hay que subir el paquete padre. De hecho subir `requests` resolvía
+> cuatro de las ocho de una sola vez, así que prioricé por paquete padre en lugar
+> de por hallazgo.
+>
+> Pero el hallazgo que más me sirvió no fue una vulnerabilidad. El dashboard
+> reportaba 27 y el escaneo local 8, para el mismo repositorio el mismo día.
+> La diferencia era que el `requirements.txt` usaba rangos abiertos: la
+> integración de GitHub evaluaba las versiones mínimas que el archivo garantiza y
+> el escaneo local, las que estaban realmente instaladas. Es decir, el manifiesto
+> no describía una aplicación sino una familia de aplicaciones posibles, y nadie
+> sabía cuál corría en producción. La corrección fue fijar versiones.
 >
 > También tuve un fallo en el propio pipeline: `--project-name` no es compatible
 > con `--all-projects` en Snyk. El YAML era válido, ningún linter lo detecta,
