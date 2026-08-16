@@ -15,15 +15,18 @@ El resultado son 120 dependencias bajo análisis automático, un pipeline que
 bloquea el merge ante vulnerabilidades altas o críticas, y los hallazgos
 publicados en la pestaña Security de GitHub.
 
-Al extender el análisis a un segundo repositorio, esta vez en Python, aparecieron
-**8 vulnerabilidades reales** (5 altas, 6 rutas medias), de las cuales **5 de 8
-llegan por dependencias transitivas** que nunca fueron declaradas.
+Al extender el análisis a un segundo repositorio, con dos ecosistemas (Python y
+Node), aparecieron **20 vulnerabilidades reales**: 8 en `requirements.txt` y 12
+en `web/package-lock.json`. En el lado Python, **5 de 8 llegan por dependencias
+transitivas** que nunca fueron declaradas.
 
-El hallazgo de mayor valor no fue una vulnerabilidad sino una inconsistencia: el
-dashboard reportaba **27** vulnerabilidades para ese repositorio y el escaneo
-local **8**. Rastrear esa diferencia llevó a la causa raíz — el uso de rangos
-abiertos (`>=`) en `requirements.txt`, que hace que el mismo archivo describa
-aplicaciones distintas según dónde se instale. Está documentado en la sección 5.5.
+El hallazgo de mayor valor no fue una vulnerabilidad sino una discrepancia entre
+el dashboard y el escaneo local. Acotarla manifiesto por manifiesto produjo un
+experimento controlado: el proyecto **Node coincide exactamente** entre ambas
+mediciones porque `package-lock.json` fija versiones, y el proyecto **Python
+difiere en 7 vulnerabilidades** porque `requirements.txt` usa rangos abiertos.
+Mismo repositorio, mismo escáner, mismo día. Está documentado en la sección 5.5,
+incluyendo el error de análisis inicial y cómo se corrigió.
 
 Durante la implementación aparecieron además cuatro fallos que no están en la
 documentación básica y que solo se descubren ejecutando (sección 5).
@@ -94,8 +97,20 @@ día que entra.
 
 ### Escaneo de un repositorio Python en producción
 
-El mismo pipeline se aplicó a `calatam/geocompliance-pilot`, un proyecto Python
-con `requirements.txt`. A diferencia del anterior, aquí sí hubo hallazgos:
+El mismo pipeline se aplicó a `calatam/geocompliance-pilot`, que resultó tener
+**dos ecosistemas**: un backend Python con `requirements.txt` y un frontend Node
+con `package-lock.json`. A diferencia del anterior, aquí sí hubo hallazgos:
+
+| Manifiesto | Dependencias | C | H | M | L | Únicas |
+|------------|-------------|---|---|---|---|--------|
+| `requirements.txt` (Python) | 30 | 0 | 5 | 3 | 0 | **8** |
+| `web/package-lock.json` (Node) | 55 | 1 | 6 | 4 | 1 | **12** |
+| **Total** | **85** | **1** | **11** | **7** | **1** | **20** |
+
+Detectar los dos requiere `--all-projects`; con `--file=requirements.txt` solo se
+analiza uno, que fue el error descrito en la sección 5.5.
+
+El detalle del lado Python:
 
 ```
 Tested 30 dependencies for known issues, found 8 issues, 11 vulnerable paths.
@@ -262,24 +277,58 @@ plataforma.
 ### 5.5 El mismo repositorio, dos recuentos distintos
 
 Este no es un fallo de configuración sino un hallazgo sobre el código, y es el
-más valioso del ejercicio.
+más valioso del ejercicio. Incluye un error de análisis propio y su corrección,
+porque el proceso de acotarlo es la parte instructiva.
 
-**Síntoma:** el dashboard de Snyk reportaba **27 vulnerabilidades** para
-`geocompliance-pilot` (1 crítica, 12 altas, 10 medias, 4 bajas). El escaneo local
-del mismo repositorio, el mismo día, devolvió **8**.
+**Síntoma inicial:** el dashboard reportaba **27 vulnerabilidades** para
+`geocompliance-pilot`. El escaneo local del mismo repositorio, el mismo día,
+devolvió **8**.
 
-**Diagnóstico:** los dos análisis no estaban mirando el mismo software. La causa
-está en el manifiesto:
+**Primer diagnóstico, equivocado:** atribuí la diferencia completa al uso de
+rangos abiertos en el manifiesto. La conclusión era parcialmente correcta, pero
+la comparación estaba mal hecha.
+
+**La corrección:** al abrir el detalle, el dashboard listaba **dos** proyectos
+bajo el mismo repositorio:
+
+```
+geocompliance-pilot:web/package.json    → 12 vulnerabilidades
+geocompliance-pilot:requirements.txt    → 15 vulnerabilidades
+                                          ──
+                                          27
+```
+
+Es un repositorio con dos ecosistemas. Mi escaneo local había usado
+`--file=requirements.txt`, es decir, **un solo manifiesto contra la suma de dos**.
+El propio CLI lo había advertido y lo pasé por alto:
+
+```
+Tip: Detected multiple supported manifests (2), use --all-projects
+```
+
+**La medición correcta**, con `snyk test --all-projects`:
+
+| Manifiesto | Escaneo local | Dashboard | ¿Coinciden? |
+|------------|---------------|-----------|-------------|
+| `web/package-lock.json` (Node) | C1 H6 M4 L1 = **12** | C1 H6 M4 L1 = **12** | **idénticos** |
+| `requirements.txt` (Python) | C0 H5 M3 L0 = **8** | C0 H6 M6 L3 = **15** | difieren en 7 |
+
+**Y así el hallazgo resulta mucho más fuerte que la versión original**, porque el
+error de comparación convirtió el caso en un experimento controlado:
+
+- El proyecto **Node coincide exactamente**, hasta el desglose por severidad.
+  Tiene `package-lock.json`, que fija versiones exactas: los dos análisis miran
+  literalmente el mismo software.
+- El proyecto **Python difiere en 7 vulnerabilidades**. Tiene `requirements.txt`
+  con rangos abiertos:
 
 ```
 PyMuPDF>=1.24.0      ← el entorno local tenía 1.27.1
 requests>=2.31.0     ← el entorno local tenía 2.32.5
 ```
 
-La integración de GitHub lee `requirements.txt` del repositorio sin un entorno
-instalado y evalúa contra las versiones que el archivo garantiza — las mínimas.
-El escaneo local analiza lo que está realmente instalado, que era más nuevo y por
-tanto tenía menos CVEs.
+Mismo repositorio, mismo escáner, mismo día, dos ecosistemas. El que fija
+versiones da resultados reproducibles; el que no, no. La variable está aislada.
 
 **El problema de fondo:** un `requirements.txt` con rangos abiertos **no describe
 una aplicación, describe una familia de aplicaciones posibles**. El servidor que
@@ -291,13 +340,22 @@ informe sobre una aplicación hipotética.
 **Solución:** fijar versiones. `pip freeze > requirements.txt` para el caso
 simple, o `pip-tools` / `poetry.lock` cuando se quiere separar lo que se declara
 (rangos legibles) de lo que se instala (versiones exactas), que es la práctica
-recomendada.
+recomendada. Es exactamente lo que `package-lock.json` hace por defecto en Node,
+y por eso ese lado del experimento salió reproducible.
 
-**Lección:** dos herramientas que dan números distintos sobre lo mismo no
-significan que una esté rota. Significan que están midiendo cosas distintas, y
-entender por qué suele revelar un problema más profundo que cualquiera de los dos
-resultados. Aquí, el hallazgo real no fueron 27 ni 8 vulnerabilidades, sino que
-el proyecto no tenía forma de saber qué versiones corría en producción.
+**Dos lecciones:**
+
+1. Dos herramientas que dan números distintos sobre lo mismo no significan que
+   una esté rota: significan que están midiendo cosas distintas. Entender por qué
+   suele revelar un problema más profundo que cualquiera de los dos resultados.
+2. Antes de explicar una diferencia, hay que verificar que los dos lados sean
+   comparables. Mi primera conclusión era plausible y apuntaba en la dirección
+   correcta, pero se apoyaba en una comparación inválida. Acotarla —un manifiesto
+   contra un manifiesto— es lo que la convirtió en evidencia.
+
+El hallazgo real no fueron 27, 20 ni 8 vulnerabilidades. Fue que la mitad del
+repositorio no tenía forma de saber qué versiones corría en producción, y la otra
+mitad sí.
 
 ---
 
@@ -400,13 +458,18 @@ errores en una integración nueva suele significar que no se probó lo suficient
 > cuatro de las ocho de una sola vez, así que prioricé por paquete padre en lugar
 > de por hallazgo.
 >
-> Pero el hallazgo que más me sirvió no fue una vulnerabilidad. El dashboard
-> reportaba 27 y el escaneo local 8, para el mismo repositorio el mismo día.
-> La diferencia era que el `requirements.txt` usaba rangos abiertos: la
-> integración de GitHub evaluaba las versiones mínimas que el archivo garantiza y
-> el escaneo local, las que estaban realmente instaladas. Es decir, el manifiesto
-> no describía una aplicación sino una familia de aplicaciones posibles, y nadie
-> sabía cuál corría en producción. La corrección fue fijar versiones.
+> Pero el hallazgo que más me sirvió no fue una vulnerabilidad. El dashboard y
+> el escaneo local no coincidían. Mi primera explicación fue que el
+> `requirements.txt` usaba rangos abiertos, y era parcialmente correcta, pero la
+> comparación estaba mal hecha: el repositorio tenía dos manifiestos y yo estaba
+> comparando uno contra la suma de ambos.
+>
+> Al acotarlo manifiesto por manifiesto quedó un experimento controlado: el
+> proyecto Node coincide exactamente, hasta el desglose por severidad, porque
+> `package-lock.json` fija versiones. El Python difiere en 7 vulnerabilidades
+> porque usa `>=`. Mismo repositorio, mismo escáner, mismo día: el que fija
+> versiones es reproducible y el que no, no lo es. La corrección fue fijar
+> versiones con pip-compile.
 >
 > También tuve un fallo en el propio pipeline: `--project-name` no es compatible
 > con `--all-projects` en Snyk. El YAML era válido, ningún linter lo detecta,
