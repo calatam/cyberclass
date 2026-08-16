@@ -553,3 +553,102 @@ después del último commit.
 Con un equipo pequeño, un PR por cada CVE genera más ruido que valor. La decisión
 se revisaría con un equipo mayor o con un volumen de dependencias más alto. Es
 una decisión de proceso, no técnica.
+
+---
+
+## 11. De un repositorio a una organización
+
+Todo lo anterior describe dos repositorios. La pregunta siguiente —y la más
+difícil— es qué cambia cuando son cincuenta. Deja de ser un problema de
+herramienta y pasa a ser uno de adopción.
+
+### 11.1 Rollout: el orden importa más que la herramienta
+
+El error clásico es activar el bloqueo en todos los repositorios el primer día.
+Cada equipo se encuentra con deuda que no creó, el pipeline se pone rojo en todas
+partes, y en una semana alguien pide una excepción global. La herramienta queda
+instalada y desactivada, que es el peor de los dos mundos: el costo sin el
+beneficio.
+
+Un despliegue que sobrevive tiene tres fases:
+
+**Fase 1 — Medir sin bloquear.** `snyk monitor` en todos los repositorios, sin
+gate. Nadie se entera salvo por un dashboard que se llena. Al terminar tienes el
+mapa real: qué se usa, cuánta deuda hay, qué equipos están peor. Sin ese mapa
+cualquier política es una adivinanza.
+
+**Fase 2 — Gate solo para lo nuevo.** El bloqueo aplica a vulnerabilidades que
+entran a partir de ahora; la deuda existente queda como backlog priorizado, no
+como muro. Así el equipo puede seguir trabajando mientras se limpia, y nadie paga
+por decisiones que tomó otro hace dos años.
+
+**Fase 3 — Cerrar la deuda por prioridad.** Con la deuda ya medida y visible, se
+ataca por explotabilidad y no por severidad nominal. Aquí ayuda lo aprendido en
+la sección 4: priorizar por paquete padre reduce el trabajo a una fracción.
+
+### 11.2 No copiar el YAML cincuenta veces
+
+Un workflow reutilizable (`workflow_call`) en un repositorio central, invocado
+por cada proyecto en cinco líneas:
+
+```yaml
+jobs:
+  seguridad:
+    uses: calatam/.github/.github/workflows/snyk-base.yml@main
+    secrets: inherit
+```
+
+Cambiar el umbral de severidad, agregar un paso o corregir un fallo como el de
+`--project-name` pasa a ser **un commit** en vez de cincuenta pull requests. Sin
+esto, la política se fragmenta: a los seis meses cada repositorio corre una
+versión distinta y nadie sabe cuál es la vigente.
+
+### 11.3 Qué método de importación usar
+
+Los dos métodos que aparecieron en este ejercicio no compiten, cubren casos
+distintos:
+
+| | Integración de SCM | CLI en CI |
+|---|---|---|
+| Descubrimiento | Automático, importa repos solos | Manual, repo por repo |
+| Qué analiza | El manifiesto del repositorio | Lo que realmente se construye |
+| Re-test | Solo, a diario | Cuando corre el pipeline |
+| PRs de arreglo | Sí | No |
+
+La integración de SCM es la que escala: da cobertura amplia sin tocar cada
+pipeline. El CLI se reserva para donde importa analizar el artefacto real —
+monorepos con resolución compleja, o cualquier caso donde el manifiesto no
+determine las versiones instaladas.
+
+Ese "donde el manifiesto no determina las versiones" no es hipotético: es
+exactamente la discrepancia de la sección 5.5. En un repositorio con rangos
+abiertos, la integración de SCM y el CLI **no pueden coincidir**, y elegir mal
+significa auditar una aplicación que no existe.
+
+### 11.4 Métricas: qué mirar y qué no
+
+Sin métricas esto es una herramienta instalada, no un programa de seguridad.
+Cuatro que sirven:
+
+| Métrica | Qué responde |
+|---------|--------------|
+| **Cobertura** (% de repos con escaneo activo) | ¿Sabemos siquiera dónde estamos parados? Es la única que importa en la fase 1 |
+| **MTTR de críticas y altas** | ¿Cuánto tarda una vulnerabilidad desde que se detecta hasta que se corrige? |
+| **Edad media de las abiertas** | ¿Hay un backlog envejeciendo sin que nadie lo mire? |
+| **Escapes a producción** | ¿Cuántas pasaron el gate? Cada una es un hueco del proceso, no un error del equipo |
+
+**Y una que hay que rechazar explícitamente: el número total de
+vulnerabilidades.** Baja cuando escaneas menos. Si se convierte en meta, el
+incentivo es apagar el escáner o subir el umbral hasta que no reporte nada. Es el
+caso de manual de una métrica que se corrompe al medirla, y conviene decirlo en
+voz alta antes de que alguien la proponga como KPI del trimestre.
+
+### 11.5 El factor que decide
+
+La parte técnica de esto es un archivo YAML. Lo que determina si el programa
+funciona es si los desarrolladores lo perciben como ayuda o como obstáculo, y eso
+se juega en decisiones que parecen menores: dónde va el gate, qué umbral, si las
+excepciones caducan, si el reporte se publica aunque el build falle.
+
+Un pipeline de seguridad que interrumpe sin explicar termina desactivado, con la
+diferencia de que ahora todos creen que el problema está resuelto.
