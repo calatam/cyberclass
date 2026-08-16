@@ -812,15 +812,80 @@ necesita pruebas y revisión. Sin esa información, el arreglo se aplica, algo s
 rompe en producción, y el equipo concluye que actualizar dependencias es
 peligroso — que es exactamente cómo nace la deuda de seguridad.
 
-### 13.3 Por qué esto cierra el argumento
+### 13.3 ¿MCP simplifica algo? No: cambia el momento
 
-La sección 12 sostiene que la IA produce lo plausible y el humano lo convierte en
-verdadero. El servidor MCP es Snyk aplicando esa misma idea desde el otro
-extremo: en vez de esperar a que el desarrollador verifique lo que el asistente
-sugirió, pone el escáner **dentro** del bucle para que la verificación ocurra en
-el momento de la generación.
+Conviene desactivar una expectativa. **El servidor MCP no agrega ninguna
+capacidad.** Las 14 herramientas que expone existen todas como comandos del CLI,
+incluidos `snyk breakability` y `snyk aibom`. Es el mismo escáner, invocado por
+otra vía.
 
-Es la diferencia entre auditar después y validar durante. Y sigue el mismo patrón
-que el resto de este trabajo: mover el control al punto donde corregir es barato
-—del despliegue al pull request, y del pull request al momento en que se escribe
-la línea.
+Lo que cambia es **quién decide ejecutarlo y cuándo**. Sin MCP, el desarrollador
+decide correr el escaneo. Con MCP, el asistente puede hacerlo mientras trabaja,
+sin que nadie se lo pida. Suena menor, y en este trabajo resultó no serlo.
+
+**Lo que ocurrió realmente en este caso:**
+
+1. `snyk test` → 8 vulnerabilidades
+2. Exportar a JSON y agrupar por paquete padre
+3. Decidir la remediación: subir cuatro paquetes
+4. **Documentarla en este reporte y publicarla**
+5. Horas después, probar `breakability_check` → `pandas` es **riesgo alto**
+
+El paso 5 debió ser el paso 3. La remediación quedó escrita, revisada y publicada
+antes de saber que uno de los cuatro upgrades exige refactorizar código de
+aplicación.
+
+**Lo que habría ocurrido con el servidor MCP conectado**, en un solo turno:
+
+```
+Petición:  "Arregla las vulnerabilidades de este requirements.txt"
+
+El asistente, sin que se lo pidan:
+  → snyk_sca_scan(path)                                8 vulnerabilidades
+  → snyk_breakability_check(requests, 2.31.0, 2.33.0)  medium
+  → snyk_breakability_check(pandas,   2.2.0,  3.0.1)   HIGH
+  → snyk_breakability_check(beautifulsoup4, ...)       low
+
+Respuesta:
+  "Tres de los cuatro upgrades son seguros. El de pandas exige refactorizar:
+   Copy-on-Write pasa a ser el comportamiento por defecto y la asignación
+   encadenada deja de funcionar. ¿Lo separo en un cambio aparte?"
+```
+
+La diferencia no es velocidad: es **orden**. El riesgo del upgrade llega antes de
+decidir, no después de documentar.
+
+Configuración, para dejarlo reproducible:
+
+```bash
+claude mcp add snyk -- snyk mcp -t stdio -p experimental
+```
+
+```json
+{
+  "mcpServers": {
+    "snyk": { "command": "snyk", "args": ["mcp", "-t", "stdio", "-p", "experimental"] }
+  }
+}
+```
+
+### 13.4 Dónde MCP no habría ayudado
+
+Y aquí está el límite, que importa tanto como la capacidad.
+
+**MCP no habría encontrado la discrepancia de la sección 5.5.** Un agente
+invocando `snyk_sca_scan` obtiene la vista local y nada más. Nada le indica que
+debe contrastarla con el dashboard: nadie se lo pidió, y no existe una
+herramienta que diga *"compara estas dos fuentes"*. Ese hallazgo salió de mirar
+dos pantallas y negarse a elegir una.
+
+El resumen, entonces:
+
+> MCP acorta el bucle entre escribir y verificar. No reemplaza a quien decide
+> **qué** verificar.
+
+Es la misma conclusión de la sección 12 vista desde el lado del producto. Snyk
+mueve el control al punto donde corregir es barato —del despliegue al pull
+request, y del pull request al momento en que se escribe la línea—. Es el patrón
+correcto, y sigue dejando intacta la parte que no se automatiza: darse cuenta de
+que hay algo que verificar.
